@@ -1,20 +1,20 @@
 # Active noise control
 
-# file name structure
+<h2>file name structure</h2>
 
-Algos.mlx             => Comparative view of all the algorithms.<br/>
-<algorithm_name>.m    => algorithms as a function file.<br/>
-<algorithm_name>001.m => stand alone algorithms codes.
+<i>Algos.mlx</i>             => Comparative view of all the algorithms.<br/>
+<i><algorithm_name>.m</i>    => algorithms as a function file.<br/>
+<i><algorithm_name>001.m</i> => stand alone algorithms codes.
 
-# Algorithms
+<h2> Algorithms</h2>
 
 FxLMS.<br/>
 VFxLMS => volterra fxmls.<br/>
 CFxLMS => chebyshev fxlms.<br/>
 HFxLMS => Hammerstein fxlms.<br/>
-Spline => B- spline [but can be converted to any type of spline.]<br/>
+Spline Fxlms<br/>
 Fourier series Fxlms.
 
-# other files
+<h2>other files</h2>
 
 transfer function => returns primary/secondary path.
