@@ -1,0 +1,2765 @@
+{
+  "nbformat": 4,
+  "nbformat_minor": 0,
+  "metadata": {
+    "colab": {
+      "provenance": [],
+      "gpuType": "T4",
+      "collapsed_sections": [
+        "6c1AuK5Sj88x",
+        "mcPxQI4lsvNU",
+        "7nK6wFRvlz02",
+        "gHg2nL_SoP6c",
+        "3CXtEjZ5ppcx",
+        "gmsX2QdXqtqv",
+        "mOgq1eQjzXpW",
+        "sP3WXpjkUHbb"
+      ],
+      "include_colab_link": true
+    },
+    "kernelspec": {
+      "name": "python3",
+      "display_name": "Python 3"
+    },
+    "language_info": {
+      "name": "python"
+    },
+    "accelerator": "GPU"
+  },
+  "cells": [
+    {
+      "cell_type": "markdown",
+      "metadata": {
+        "id": "view-in-github",
+        "colab_type": "text"
+      },
+      "source": [
+        "<a href=\"https://colab.research.google.com/github/Rnerd61/Active-noise-control/blob/main/GPT2\" target=\"_parent\"><img src=\"https://colab.research.google.com/assets/colab-badge.svg\" alt=\"Open In Colab\"/></a>"
+      ]
+    },
+    {
+      "cell_type": "markdown",
+      "source": [
+        "# Parameters\n",
+        "\n",
+        "Importing libraries and initialising HyperParameters(default)\n",
+        "\n",
+        "Importing Pretrained Weights from GPTLMHeadModel"
+      ],
+      "metadata": {
+        "id": "6c1AuK5Sj88x"
+      }
+    },
+    {
+      "cell_type": "code",
+      "source": [
+        "import torch\n",
+        "import torch.nn as nn\n",
+        "from torch.nn import functional as F\n",
+        "import torch\n",
+        "import math\n",
+        "from transformers import GPT2LMHeadModel, GPT2Tokenizer, GPT2Config"
+      ],
+      "metadata": {
+        "id": "durGdiDgkUIL"
+      },
+      "execution_count": null,
+      "outputs": []
+    },
+    {
+      "cell_type": "code",
+      "execution_count": null,
+      "metadata": {
+        "colab": {
+          "base_uri": "https://localhost:8080/"
+        },
+        "id": "XFuNjaUXj6ZM",
+        "outputId": "0475bbeb-7a54-4db2-d930-7cbd08d68242"
+      },
+      "outputs": [
+        {
+          "output_type": "stream",
+          "name": "stdout",
+          "text": [
+            "cuda\n"
+          ]
+        },
+        {
+          "output_type": "execute_result",
+          "data": {
+            "text/plain": [
+              "<torch._C.Generator at 0x7f4f4419d1f0>"
+            ]
+          },
+          "metadata": {},
+          "execution_count": 2
+        }
+      ],
+      "source": [
+        "# hyperparameters 125M\n",
+        "block_size = 1024\n",
+        "vocab_size = 50257\n",
+        "\n",
+        "\n",
+        "device = 'cuda' if torch.cuda.is_available() else 'cpu'\n",
+        "n_embd = 768\n",
+        "n_pos = 1024\n",
+        "n_layer = 12\n",
+        "n_head = 12\n",
+        "n_w = 128\n",
+        "n_g = 3\n",
+        "dropout = 0.1\n",
+        "\n",
+        "batch_size = 1\n",
+        "max_iters = 1000\n",
+        "eval_interval = 50\n",
+        "learning_rate = 1e-3\n",
+        "eval_iters = 200\n",
+        "\n",
+        "\n",
+        "print(device)\n",
+        "torch.manual_seed(1337)"
+      ]
+    },
+    {
+      "cell_type": "code",
+      "source": [
+        "#Pretrained Model\n",
+        "model_name = \"gpt2\"\n",
+        "pretrained_model = GPT2LMHeadModel.from_pretrained(model_name)\n",
+        "tokenizer = GPT2Tokenizer.from_pretrained(model_name)\n",
+        "\n",
+        "pretrained_model.to(device)\n",
+        "pretrained_model.eval()\n",
+        "\n",
+        "pretrained_state_dict = pretrained_model.state_dict()"
+      ],
+      "metadata": {
+        "id": "e5nwzOdfliL1",
+        "colab": {
+          "base_uri": "https://localhost:8080/"
+        },
+        "outputId": "d6c8746d-2121-4cad-f342-486de51f5206"
+      },
+      "execution_count": null,
+      "outputs": [
+        {
+          "output_type": "display_data",
+          "data": {
+            "text/plain": [
+              "config.json:   0%|          | 0.00/665 [00:00<?, ?B/s]"
+            ],
+            "application/vnd.jupyter.widget-view+json": {
+              "version_major": 2,
+              "version_minor": 0,
+              "model_id": "bbbdd88a648041309343426751b1c693"
+            }
+          },
+          "metadata": {}
+        },
+        {
+          "output_type": "display_data",
+          "data": {
+            "text/plain": [
+              "model.safetensors:   0%|          | 0.00/548M [00:00<?, ?B/s]"
+            ],
+            "application/vnd.jupyter.widget-view+json": {
+              "version_major": 2,
+              "version_minor": 0,
+              "model_id": "4d2acfa7adbf47a88469c582ae4998df"
+            }
+          },
+          "metadata": {}
+        },
+        {
+          "output_type": "display_data",
+          "data": {
+            "text/plain": [
+              "generation_config.json:   0%|          | 0.00/124 [00:00<?, ?B/s]"
+            ],
+            "application/vnd.jupyter.widget-view+json": {
+              "version_major": 2,
+              "version_minor": 0,
+              "model_id": "d63a2b7fc0984669a75303baddfe06fa"
+            }
+          },
+          "metadata": {}
+        },
+        {
+          "output_type": "display_data",
+          "data": {
+            "text/plain": [
+              "vocab.json:   0%|          | 0.00/1.04M [00:00<?, ?B/s]"
+            ],
+            "application/vnd.jupyter.widget-view+json": {
+              "version_major": 2,
+              "version_minor": 0,
+              "model_id": "dedc95eb707f4a0db1afd28d9c7d94ba"
+            }
+          },
+          "metadata": {}
+        },
+        {
+          "output_type": "display_data",
+          "data": {
+            "text/plain": [
+              "merges.txt:   0%|          | 0.00/456k [00:00<?, ?B/s]"
+            ],
+            "application/vnd.jupyter.widget-view+json": {
+              "version_major": 2,
+              "version_minor": 0,
+              "model_id": "ef94e5dc26074e9fa726aeb08306d0d8"
+            }
+          },
+          "metadata": {}
+        },
+        {
+          "output_type": "display_data",
+          "data": {
+            "text/plain": [
+              "tokenizer.json:   0%|          | 0.00/1.36M [00:00<?, ?B/s]"
+            ],
+            "application/vnd.jupyter.widget-view+json": {
+              "version_major": 2,
+              "version_minor": 0,
+              "model_id": "b74b6e02c74949cdb28b6db75cc7dabb"
+            }
+          },
+          "metadata": {}
+        }
+      ]
+    },
+    {
+      "cell_type": "code",
+      "source": [
+        "input_text = \"Once upon a time\"\n",
+        "input_ids = tokenizer.encode(input_text, return_tensors='pt').to(device)"
+      ],
+      "metadata": {
+        "id": "h1sGL4tknkUI"
+      },
+      "execution_count": null,
+      "outputs": []
+    },
+    {
+      "cell_type": "markdown",
+      "source": [
+        "# Common Layers\n",
+        "\n",
+        "Convoltional Layer, NewGELUActivation, and GPTMLP block (same for all tasks)"
+      ],
+      "metadata": {
+        "id": "mcPxQI4lsvNU"
+      }
+    },
+    {
+      "cell_type": "code",
+      "source": [
+        "# Defaualt Conv1D implementation (by Hugging Face)\n",
+        "class Conv1D(nn.Module):\n",
+        "\n",
+        "    def __init__(self, nf, nx):\n",
+        "        super().__init__()\n",
+        "        self.nf = nf\n",
+        "        self.weight = nn.Parameter(torch.empty(nx, nf))\n",
+        "        self.bias = nn.Parameter(torch.zeros(nf))\n",
+        "        nn.init.normal_(self.weight, std=0.02)\n",
+        "\n",
+        "    def forward(self, x):\n",
+        "        size_out = x.size()[:-1] + (self.nf,)\n",
+        "        x = torch.addmm(self.bias, x.view(-1, x.size(-1)), self.weight)\n",
+        "        x = x.view(size_out)\n",
+        "        return x"
+      ],
+      "metadata": {
+        "id": "D6E5z1cDmBLj"
+      },
+      "execution_count": null,
+      "outputs": []
+    },
+    {
+      "cell_type": "code",
+      "source": [
+        "# Defaualt Conv1D implementation (by Hugging Face)\n",
+        "class NewGELUActivation(nn.Module):\n",
+        "    def forward(self, input):\n",
+        "        return 0.5 * input * (1.0 + torch.tanh(math.sqrt(2.0 / math.pi) * (input + 0.044715 * torch.pow(input, 3.0))))"
+      ],
+      "metadata": {
+        "id": "vh7_I89GmBIu"
+      },
+      "execution_count": null,
+      "outputs": []
+    },
+    {
+      "cell_type": "code",
+      "source": [
+        "class GPT2MLP(nn.Module):\n",
+        "\n",
+        "    def __init__(self):\n",
+        "        super().__init__()\n",
+        "        self.c_fc    = Conv1D(4*n_embd,  n_embd)\n",
+        "        self.act   = NewGELUActivation()\n",
+        "        self.c_proj  = Conv1D(n_embd, 4*n_embd)\n",
+        "        self.dropout = nn.Dropout(dropout)\n",
+        "\n",
+        "    def forward(self, x):\n",
+        "        x = self.c_fc(x)\n",
+        "        x = self.act(x)\n",
+        "        x = self.c_proj(x)\n",
+        "        x = self.dropout(x)\n",
+        "        return x"
+      ],
+      "metadata": {
+        "id": "_sMNtp4CmBCq"
+      },
+      "execution_count": null,
+      "outputs": []
+    },
+    {
+      "cell_type": "markdown",
+      "source": [
+        "# Basic Implementation\n",
+        "\n",
+        "Basic Implemention of GPT2 (ref. Nano GPT)"
+      ],
+      "metadata": {
+        "id": "7nK6wFRvlz02"
+      }
+    },
+    {
+      "cell_type": "code",
+      "source": [
+        "class GPT2Attention(nn.Module):\n",
+        "\n",
+        "    def __init__(self):\n",
+        "        super().__init__()\n",
+        "        assert n_embd % n_head == 0\n",
+        "\n",
+        "\n",
+        "        # k, q, v all heads, but in a batch\n",
+        "        self.c_attn = Conv1D(3*n_embd, n_embd)\n",
+        "        self.c_proj = Conv1D(n_embd, n_embd)\n",
+        "\n",
+        "        self.attn_dropout = nn.Dropout(dropout)\n",
+        "        self.resid_dropout = nn.Dropout(dropout)\n",
+        "        self.n_head = n_head\n",
+        "        self.n_embd = n_embd\n",
+        "        self.dropout = dropout\n",
+        "\n",
+        "        self.register_buffer(\"bias\", torch.tril(torch.ones(block_size, block_size))\n",
+        "                                        .view(1, 1, block_size, block_size))\n",
+        "\n",
+        "\n",
+        "\n",
+        "\n",
+        "    def forward(self, x):\n",
+        "        B, T, C = x.size() #(Batch,Time(seq ken),C (embeddings))\n",
+        "\n",
+        "\n",
+        "        q, k, v  = self.c_attn(x).split(self.n_embd, dim=2)\n",
+        "\n",
+        "        k = k.view(B, T, self.n_head, C // self.n_head).transpose(1, 2) # (B, nh, T, hs)  (Batch, heads, seq_len, n_emb/head)\n",
+        "        q = q.view(B, T, self.n_head, C // self.n_head).transpose(1, 2) # (B, nh, T, hs)\n",
+        "        v = v.view(B, T, self.n_head, C // self.n_head).transpose(1, 2) # (B, nh, T, hs)\n",
+        "\n",
+        "\n",
+        "        att = (q @ k.transpose(-2, -1)) * (1.0 / math.sqrt(k.size(-1)))   # QK'/sqrt(d_model)\n",
+        "        att = att.masked_fill(self.bias[:,:,:T,:T] == 0, float('-inf'))   # Decoder => do not look for future tokens just pass\n",
+        "        att = F.softmax(att, dim=-1)\n",
+        "        att = self.attn_dropout(att)\n",
+        "\n",
+        "        y = att @ v                                                      #softmax(QK'/sqrt(dmodel))V\n",
+        "        y = y.transpose(1, 2).contiguous().view(B, T, C)                 # Bring back all heads\n",
+        "\n",
+        "        y = self.resid_dropout(self.c_proj(y))\n",
+        "        return y"
+      ],
+      "metadata": {
+        "id": "Euqggy3emBF3"
+      },
+      "execution_count": null,
+      "outputs": []
+    },
+    {
+      "cell_type": "code",
+      "source": [
+        "class GPT2Block(nn.Module):\n",
+        "\n",
+        "    def __init__(self):\n",
+        "        super().__init__()\n",
+        "        self.ln_1 = nn.LayerNorm((n_embd,), eps=1e-05, elementwise_affine=True)\n",
+        "        self.attn = GPT2Attention()\n",
+        "        self.ln_2 = nn.LayerNorm((n_embd,), eps=1e-05, elementwise_affine=True)\n",
+        "        self.mlp = GPT2MLP()\n",
+        "\n",
+        "    def forward(self, x):\n",
+        "        x = x + self.attn(self.ln_1(x))\n",
+        "        x = x + self.mlp(self.ln_2(x))\n",
+        "        return x"
+      ],
+      "metadata": {
+        "id": "jwwKaKrLmA9Z"
+      },
+      "execution_count": null,
+      "outputs": []
+    },
+    {
+      "cell_type": "code",
+      "source": [
+        "class BasicGPT(nn.Module):\n",
+        "\n",
+        "    def __init__(self):\n",
+        "        super().__init__()\n",
+        "\n",
+        "        self.transformer = nn.ModuleDict(dict(\n",
+        "\n",
+        "            wte = nn.Embedding(vocab_size, n_embd, device=device),\n",
+        "            wpe = nn.Embedding(block_size, n_embd, device=device),\n",
+        "            drop = nn.Dropout(dropout),\n",
+        "            h = nn.ModuleList([GPT2Block() for _ in range(n_layer)]),\n",
+        "            ln_f = nn.LayerNorm((n_embd,), eps=1e-05, elementwise_affine=True),\n",
+        "\n",
+        "            ))\n",
+        "        self.lm_head = nn.Linear(n_embd, vocab_size, bias=False)\n",
+        "\n",
+        "    def forward(self, idx, targets=None):\n",
+        "        B, T = idx.size()\n",
+        "        pos = torch.arange(0, T, dtype=torch.long, device=device)       # shape (T)\n",
+        "\n",
+        "\n",
+        "        tok_emb = self.transformer.wte(idx) # token embeddings of shape (b, t, n_embd)\n",
+        "        pos_emb = self.transformer.wpe(pos) # position embeddings of shape (t, n_embd)\n",
+        "\n",
+        "        x = self.transformer.drop(tok_emb + pos_emb)\n",
+        "\n",
+        "        for GPT2Block in self.transformer.h:\n",
+        "            x = GPT2Block(x)\n",
+        "        x = self.transformer.ln_f(x)\n",
+        "\n",
+        "\n",
+        "        if targets is not None:     # Training\n",
+        "            logits = self.lm_head(x)\n",
+        "            loss = F.cross_entropy(logits.view(-1, logits.size(-1)), targets.view(-1), ignore_index=-1)\n",
+        "        else:                       # Evaluation\n",
+        "            logits = self.lm_head(x[:, [-1], :]) # note: using list [-1] to preserve the time dim\n",
+        "            loss = None\n",
+        "\n",
+        "        return logits, loss\n",
+        "\n",
+        "    def generate(self, idx, max_new_tokens):\n",
+        "\n",
+        "        for _ in range(max_new_tokens):\n",
+        "\n",
+        "            idx_cond = idx if idx.size(1) <= block_size else idx[:, -block_size:]       #trim to maximum to block size (maximum context lenth)\n",
+        "\n",
+        "            logits, _ = self(idx_cond)\n",
+        "\n",
+        "            logits = logits[:, -1, :]\n",
+        "\n",
+        "            probs = F.softmax(logits, dim=-1)\n",
+        "            idx_next = torch.multinomial(probs, num_samples=1)\n",
+        "\n",
+        "            idx = torch.cat((idx, idx_next), dim=1)                          #append generated ouput for next input for futher prediction\n",
+        "        return idx"
+      ],
+      "metadata": {
+        "id": "qwm1Q5bXmA21"
+      },
+      "execution_count": null,
+      "outputs": []
+    },
+    {
+      "cell_type": "code",
+      "source": [
+        "load_Basic_model = BasicGPT()   #125M params GPT  (same architecture as HuggingFace GPTLMHEAD)\n",
+        "load_Basic_model.to(device)"
+      ],
+      "metadata": {
+        "colab": {
+          "base_uri": "https://localhost:8080/"
+        },
+        "id": "G7EUSpjylpnS",
+        "outputId": "85203056-ec85-4027-a456-a182071da718"
+      },
+      "execution_count": null,
+      "outputs": [
+        {
+          "output_type": "execute_result",
+          "data": {
+            "text/plain": [
+              "BasicGPT(\n",
+              "  (transformer): ModuleDict(\n",
+              "    (wte): Embedding(50257, 768)\n",
+              "    (wpe): Embedding(1024, 768)\n",
+              "    (drop): Dropout(p=0.1, inplace=False)\n",
+              "    (h): ModuleList(\n",
+              "      (0-11): 12 x GPT2Block(\n",
+              "        (ln_1): LayerNorm((768,), eps=1e-05, elementwise_affine=True)\n",
+              "        (attn): GPT2Attention(\n",
+              "          (c_attn): Conv1D()\n",
+              "          (c_proj): Conv1D()\n",
+              "          (attn_dropout): Dropout(p=0.1, inplace=False)\n",
+              "          (resid_dropout): Dropout(p=0.1, inplace=False)\n",
+              "        )\n",
+              "        (ln_2): LayerNorm((768,), eps=1e-05, elementwise_affine=True)\n",
+              "        (mlp): GPT2MLP(\n",
+              "          (c_fc): Conv1D()\n",
+              "          (c_proj): Conv1D()\n",
+              "          (act): NewGELUActivation()\n",
+              "          (dropout): Dropout(p=0.1, inplace=False)\n",
+              "        )\n",
+              "      )\n",
+              "    )\n",
+              "    (ln_f): LayerNorm((768,), eps=1e-05, elementwise_affine=True)\n",
+              "  )\n",
+              "  (lm_head): Linear(in_features=768, out_features=50257, bias=False)\n",
+              ")"
+            ]
+          },
+          "metadata": {},
+          "execution_count": 12
+        }
+      ]
+    },
+    {
+      "cell_type": "code",
+      "source": [
+        "load_Basic_model.load_state_dict(pretrained_state_dict, strict=False)"
+      ],
+      "metadata": {
+        "colab": {
+          "base_uri": "https://localhost:8080/"
+        },
+        "id": "QaVt7iG3l8S9",
+        "outputId": "1a996b0f-d3f6-4cdc-9cda-8ac5d1c95427"
+      },
+      "execution_count": null,
+      "outputs": [
+        {
+          "output_type": "execute_result",
+          "data": {
+            "text/plain": [
+              "<All keys matched successfully>"
+            ]
+          },
+          "metadata": {},
+          "execution_count": 13
+        }
+      ]
+    },
+    {
+      "cell_type": "code",
+      "source": [
+        "#Compare our model on pretrained weights\n",
+        "\n",
+        "with torch.no_grad():\n",
+        "    output = load_Basic_model.generate(input_ids, max_new_tokens=50)\n",
+        "\n",
+        "with torch.no_grad():\n",
+        "    output_ = pretrained_model.generate(input_ids, max_new_tokens=50)\n",
+        "\n",
+        "\n",
+        "print(\"our Text:\", tokenizer.decode(output[0], skip_special_tokens=True))\n",
+        "print(\"gpt Text:\", tokenizer.decode(output_[0], skip_special_tokens=True))\n"
+      ],
+      "metadata": {
+        "colab": {
+          "base_uri": "https://localhost:8080/"
+        },
+        "id": "FvkdyCREmicR",
+        "outputId": "66fd4bfa-1edb-40a8-b155-c83fcbe2ba8e"
+      },
+      "execution_count": null,
+      "outputs": [
+        {
+          "output_type": "stream",
+          "name": "stderr",
+          "text": [
+            "The attention mask and the pad token id were not set. As a consequence, you may observe unexpected behavior. Please pass your input's `attention_mask` to obtain reliable results.\n",
+            "Setting `pad_token_id` to `eos_token_id`:50256 for open-end generation.\n"
+          ]
+        },
+        {
+          "output_type": "stream",
+          "name": "stdout",
+          "text": [
+            "our Text: Once upon a time which you used their perennial kitchen utensils, we found ourselves in the yellow rooms. Every week our children were assigned to bring out their hen-and-flower pots, their hat, their work body and bone though they knew and knew they would\n",
+            "gpt Text: Once upon a time, the world was a place of great beauty and great danger. The world was a place of great danger, and the world was a place of great danger. The world was a place of great danger, and the world was a place of great danger\n"
+          ]
+        }
+      ]
+    },
+    {
+      "cell_type": "markdown",
+      "source": [
+        "# Rotary Positional Embedding\n",
+        "\n",
+        "Rotary Position Embedding"
+      ],
+      "metadata": {
+        "id": "gHg2nL_SoP6c"
+      }
+    },
+    {
+      "cell_type": "code",
+      "source": [
+        "from pyparsing import Optional\n",
+        "import numpy as np\n",
+        "\n",
+        "class RotaryPositionalEmbedding(nn.Embedding):   #Positional Embedding as paper \"Attention is all you need\"\n",
+        "\n",
+        "    def __init__(self, block_size, n_embds) -> None:\n",
+        "        super().__init__(block_size, n_embds)\n",
+        "        self.weight = self._init_weight(self.weight)\n",
+        "\n",
+        "    @staticmethod\n",
+        "    def _init_weight(out) -> nn.Parameter:\n",
+        "\n",
+        "        n_pos, dim = out.shape\n",
+        "        pos_enc = np.array( [[pos / np.power(10000, 2 * (j // 2) / dim) for j in range(dim)] for pos in range(n_pos)] )\n",
+        "        out.requires_grad = False\n",
+        "\n",
+        "        _d = int(np.ceil(dim//2))\n",
+        "\n",
+        "        out[:, 0:_d] = torch.FloatTensor(np.sin(pos_enc[:, 0::2]))\n",
+        "        out[:, _d:] = torch.FloatTensor(np.cos(pos_enc[:, 1::2]))\n",
+        "        out.detach_()\n",
+        "\n",
+        "        return out\n",
+        "\n",
+        "    @torch.no_grad()\n",
+        "    def forward(self, seq_len):\n",
+        "\n",
+        "        positions = torch.arange(0, seq_len, dtype=torch.long, device=self.weight.device)\n",
+        "\n",
+        "        return super().forward(positions)\n",
+        "\n",
+        "\n",
+        "\n",
+        "\n",
+        "def rotate_half(x):\n",
+        "    x1, x2 = x.chunk(2, dim=-1)\n",
+        "    return torch.cat((-x2, x1), dim=-1)\n",
+        "\n",
+        "\n",
+        "@torch.jit.script\n",
+        "def apply_rotary_pos_emb(x, cos, sin):\n",
+        "\n",
+        "    return (x * cos) + (rotate_half(x) * sin)\n",
+        "\n",
+        "\n",
+        "class RotaryEmbedding(torch.nn.Module):\n",
+        "\n",
+        "    def __init__(self, d_model):\n",
+        "        super().__init__()\n",
+        "\n",
+        "        inv_freq = 1.0 / (10000 ** (torch.arange(0, d_model, 2).float() / d_model))\n",
+        "        self.register_buffer(\"inv_freq\", inv_freq)\n",
+        "\n",
+        "\n",
+        "    def create_cos_sin(self, x, seq_dimension=1):\n",
+        "        seq_len = x.shape[seq_dimension]\n",
+        "\n",
+        "        pos = torch.arange( seq_len, device=x.device, dtype=torch.float32)\n",
+        "        freqs = torch.einsum(\"i,j->ij\", pos, self.inv_freq.to(x.dtype))\n",
+        "\n",
+        "        emb = torch.cat((freqs, freqs), dim=-1).to(x.device)\n",
+        "        # print(emb.shape)\n",
+        "\n",
+        "        self.cos = emb.cos()[None, None, :, :].to(x.dtype)\n",
+        "        self.sin = emb.sin()[None, None, :, :].to(x.dtype)\n",
+        "\n",
+        "        return self.cos, self.sin\n",
+        "\n",
+        "\n",
+        "\n",
+        "    def forward(self, q, k):\n",
+        "        self.cos, self.cos = self.create_cos_sin(k, seq_dimension=-2)\n",
+        "\n",
+        "        return (\n",
+        "            apply_rotary_pos_emb(q, self.cos, self.sin),\n",
+        "            apply_rotary_pos_emb(k, self.cos, self.cos),\n",
+        "        )\n",
+        "\n"
+      ],
+      "metadata": {
+        "id": "-_K52grjonKa"
+      },
+      "execution_count": null,
+      "outputs": []
+    },
+    {
+      "cell_type": "code",
+      "source": [
+        "class RotaryGPT2Attention(nn.Module):\n",
+        "\n",
+        "    def __init__(self):\n",
+        "        super().__init__()\n",
+        "        assert n_embd % n_head == 0\n",
+        "        # key, query, value projections for all heads, but in a batch\n",
+        "        self.c_attn = Conv1D(3*n_embd, n_embd)\n",
+        "        # output projection\n",
+        "        self.c_proj = Conv1D(n_embd, n_embd)\n",
+        "        # regularization\n",
+        "\n",
+        "        self.attn_dropout = nn.Dropout(dropout)\n",
+        "        self.resid_dropout = nn.Dropout(dropout)\n",
+        "        self.n_head = n_head\n",
+        "        self.n_embd = n_embd\n",
+        "        self.dropout = dropout\n",
+        "\n",
+        "        self.rope = RotaryEmbedding(n_embd//n_head)\n",
+        "        # flash attention make GPU go brrrrr but support is only in PyTorch >= 2.0\n",
+        "        self.flash = hasattr(torch.nn.functional, 'scaled_dot_product_attention')\n",
+        "        if not self.flash:\n",
+        "            print(\"WARNING: using slow attention. Flash Attention requires PyTorch >= 2.0\")\n",
+        "            # causal mask to ensure that attention is only applied to the left in the input sequence\n",
+        "            self.register_buffer(\"rmask\", torch.tril(torch.ones(block_size, block_size))\n",
+        "                                        .view(1, 1, block_size, block_size))\n",
+        "\n",
+        "    def forward(self, x):\n",
+        "        B, T, C = x.size() # batch size, sequence length, embedding dimensionality (n_embd)\n",
+        "        # print(\"#\", x.size())\n",
+        "\n",
+        "        # calculate query, key, values for all heads in batch and move head forward to be the batch dim\n",
+        "\n",
+        "        x = self.c_attn(x)\n",
+        "        # print(x.shape)\n",
+        "        q, k, v  = x.split(self.n_embd, dim=2)\n",
+        "\n",
+        "\n",
+        "\n",
+        "        k = k.view(B, T, self.n_head, C // self.n_head).transpose(1, 2) # (B, nh, T, hs)\n",
+        "        q = q.view(B, T, self.n_head, C // self.n_head).transpose(1, 2) # (B, nh, T, hs)\n",
+        "        v = v.view(B, T, self.n_head, C // self.n_head).transpose(1, 2) # (B, nh, T, hs)\n",
+        "\n",
+        "        q, k = self.rope(q, k)\n",
+        "\n",
+        "\n",
+        "        # causal self-attention; Self-attend: (B, nh, T, hs) x (B, nh, hs, T) -> (B, nh, T, T)\n",
+        "        if self.flash:\n",
+        "            # efficient attention using Flash Attention CUDA kernels\n",
+        "            y = torch.nn.functional.scaled_dot_product_attention(q, k, v, attn_mask=None, dropout_p=self.dropout if self.training else 0, is_causal=True)\n",
+        "        else:\n",
+        "            # manual implementation of attention\n",
+        "            att = (q @ k.transpose(-2, -1)) * (1.0 / math.sqrt(k.size(-1)))\n",
+        "            att = att.masked_fill(self.rmask[:,:,:T,:T] == 0, float('-inf'))\n",
+        "            att = F.softmax(att, dim=-1)\n",
+        "            att = self.attn_dropout(att)\n",
+        "            y = att @ v # (B, nh, T, T) x (B, nh, T, hs) -> (B, nh, T, hs)\n",
+        "        y = y.transpose(1, 2).contiguous().view(B, T, C) # re-assemble all head outputs side by side\n",
+        "\n",
+        "        # output projection\n",
+        "        y = self.resid_dropout(self.c_proj(y))\n",
+        "        return y"
+      ],
+      "metadata": {
+        "id": "AwuHiN42oYTi"
+      },
+      "execution_count": null,
+      "outputs": []
+    },
+    {
+      "cell_type": "code",
+      "source": [
+        "class RotaryGPT2Block(nn.Module):\n",
+        "\n",
+        "    def __init__(self):\n",
+        "        super().__init__()\n",
+        "        self.ln_1 = nn.LayerNorm((n_embd,), eps=1e-05, elementwise_affine=True)\n",
+        "        self.attn = RotaryGPT2Attention()\n",
+        "        self.ln_2 = nn.LayerNorm((n_embd,), eps=1e-05, elementwise_affine=True)\n",
+        "        self.mlp = GPT2MLP()\n",
+        "\n",
+        "    def forward(self, x):\n",
+        "        x = x + self.attn(self.ln_1(x))\n",
+        "        x = x + self.mlp(self.ln_2(x))\n",
+        "        return x"
+      ],
+      "metadata": {
+        "id": "QFsOMFwQouea"
+      },
+      "execution_count": null,
+      "outputs": []
+    },
+    {
+      "cell_type": "code",
+      "source": [
+        "class RotaryGPT(nn.Module):\n",
+        "\n",
+        "    def __init__(self):\n",
+        "        super().__init__()\n",
+        "\n",
+        "        self.transformer = nn.ModuleDict(dict(\n",
+        "            wte = nn.Embedding(vocab_size, n_embd),\n",
+        "            wpe = RotaryPositionalEmbedding(block_size, n_embd),\n",
+        "\n",
+        "            drop = nn.Dropout(dropout),\n",
+        "            h = nn.ModuleList([RotaryGPT2Block() for _ in range(n_layer)]),\n",
+        "            ln_f = nn.LayerNorm((n_embd,), eps=1e-05, elementwise_affine=True),\n",
+        "        ))\n",
+        "        self.lm_head = nn.Linear(n_embd, vocab_size, bias=False)\n",
+        "\n",
+        "    def forward(self, idx, targets=None):\n",
+        "        device = idx.device\n",
+        "        B, T = idx.size()\n",
+        "        pos = torch.arange(0, T, dtype=torch.long, device=device)\n",
+        "\n",
+        "        # forward the GPT model itself\n",
+        "        tok_emb = self.transformer.wte(idx)    # token embeddings of shape (b, t, n_embd)\n",
+        "        pos_emb = self.transformer.wpe(T)      # position embeddings of shape (t, n_embd)\n",
+        "\n",
+        "        x = self.transformer.drop(tok_emb + pos_emb)\n",
+        "        for GPT2Block in self.transformer.h:\n",
+        "            x = GPT2Block(x)\n",
+        "\n",
+        "        x = self.transformer.ln_f(x)\n",
+        "\n",
+        "\n",
+        "        if targets is not None:\n",
+        "            logits = self.lm_head(x)\n",
+        "            loss = F.cross_entropy(logits.view(-1, logits.size(-1)), targets.view(-1), ignore_index=-1)\n",
+        "        else:\n",
+        "            logits = self.lm_head(x[:, [-1], :])\n",
+        "            loss = None\n",
+        "\n",
+        "        return logits, loss\n",
+        "\n",
+        "\n",
+        "    def generate(self, idx, max_new_tokens):\n",
+        "        for _ in range(max_new_tokens):\n",
+        "\n",
+        "            idx_cond = idx if idx.size(1) <= block_size else idx[:, -block_size:]\n",
+        "\n",
+        "            logits, _ = self(idx_cond)\n",
+        "\n",
+        "            logits = logits[:, -1, :]\n",
+        "\n",
+        "            probs = F.softmax(logits, dim=-1)\n",
+        "            idx_next = torch.multinomial(probs, num_samples=1)\n",
+        "\n",
+        "            idx = torch.cat((idx, idx_next), dim=1)\n",
+        "        return idx"
+      ],
+      "metadata": {
+        "id": "bnVpDjPwozN6"
+      },
+      "execution_count": null,
+      "outputs": []
+    },
+    {
+      "cell_type": "code",
+      "source": [
+        "load_Rotary_model = RotaryGPT()\n",
+        "load_Rotary_model.to(device)"
+      ],
+      "metadata": {
+        "colab": {
+          "base_uri": "https://localhost:8080/"
+        },
+        "id": "K5Jvc8-6o_ah",
+        "outputId": "02ac3199-009e-481f-fb9d-786773cfbbd9"
+      },
+      "execution_count": null,
+      "outputs": [
+        {
+          "output_type": "execute_result",
+          "data": {
+            "text/plain": [
+              "RotaryGPT(\n",
+              "  (transformer): ModuleDict(\n",
+              "    (wte): Embedding(50257, 768)\n",
+              "    (wpe): RoFormerSinusoidalPositionalEmbedding(1024, 768)\n",
+              "    (drop): Dropout(p=0.1, inplace=False)\n",
+              "    (h): ModuleList(\n",
+              "      (0-11): 12 x RotaryGPT2Block(\n",
+              "        (ln_1): LayerNorm((768,), eps=1e-05, elementwise_affine=True)\n",
+              "        (attn): RotaryGPT2Attention(\n",
+              "          (c_attn): Conv1D()\n",
+              "          (c_proj): Conv1D()\n",
+              "          (attn_dropout): Dropout(p=0.1, inplace=False)\n",
+              "          (resid_dropout): Dropout(p=0.1, inplace=False)\n",
+              "          (rope): RotaryEmbedding()\n",
+              "        )\n",
+              "        (ln_2): LayerNorm((768,), eps=1e-05, elementwise_affine=True)\n",
+              "        (mlp): GPT2MLP(\n",
+              "          (c_fc): Conv1D()\n",
+              "          (c_proj): Conv1D()\n",
+              "          (act): NewGELUActivation()\n",
+              "          (dropout): Dropout(p=0.1, inplace=False)\n",
+              "        )\n",
+              "      )\n",
+              "    )\n",
+              "    (ln_f): LayerNorm((768,), eps=1e-05, elementwise_affine=True)\n",
+              "  )\n",
+              "  (lm_head): Linear(in_features=768, out_features=50257, bias=False)\n",
+              ")"
+            ]
+          },
+          "metadata": {},
+          "execution_count": 19
+        }
+      ]
+    },
+    {
+      "cell_type": "markdown",
+      "source": [
+        "# Grouped Query Attention\n",
+        "\n",
+        "Grouped Query Attention"
+      ],
+      "metadata": {
+        "id": "3CXtEjZ5ppcx"
+      }
+    },
+    {
+      "cell_type": "code",
+      "source": [
+        "class GQA_GPT2Attention(nn.Module):\n",
+        "\n",
+        "    def __init__(self):\n",
+        "        super().__init__()\n",
+        "        assert n_embd % n_head == 0\n",
+        "        assert n_head % n_g == 0\n",
+        "\n",
+        "        self.attn_dropout = nn.Dropout(dropout)\n",
+        "        self.resid_dropout = nn.Dropout(dropout)\n",
+        "        self.n_head = n_head\n",
+        "        self.n_embd = n_embd\n",
+        "        self.dropout = dropout\n",
+        "\n",
+        "\n",
+        "        self.c_gattn = Conv1D(3*self.n_embd, n_embd)\n",
+        "        self.c_proj = Conv1D(n_embd, n_embd)\n",
+        "\n",
+        "\n",
+        "        self.register_buffer(\"bias\", torch.tril(torch.ones(block_size, block_size))\n",
+        "                                    .view(1, 1, block_size, block_size))\n",
+        "\n",
+        "    def forward(self, x):\n",
+        "        B, T, C = x.size()\n",
+        "        x = self.c_gattn(x)\n",
+        "\n",
+        "        q, k, v  = x.split(self.n_embd, dim=2)\n",
+        "\n",
+        "\n",
+        "        k = torch.mean(k.view(B, T, n_g, self.n_head//n_g, self.n_embd // (self.n_head)), 2).repeat(1,1,n_g,1).transpose(1, 2) # (B, nh, T, hs)\n",
+        "        q = q.view(B, T, self.n_head, C // self.n_head).transpose(1, 2)                                                        # (B, nh, T, hs)\n",
+        "        v = torch.mean(v.view(B, T, n_g, self.n_head//n_g, self.n_embd // (self.n_head)), 2).repeat(1,1,n_g,1).transpose(1, 2) # (B, nh, T, hs)\n",
+        "\n",
+        "        att = (q @ k.transpose(-2, -1)) * (1.0 / math.sqrt(k.size(-1)))\n",
+        "\n",
+        "        att = att.masked_fill(self.bias[:,:,:T,:T] == 0, float('-inf'))\n",
+        "        att = F.softmax(att, dim=-1)\n",
+        "        att = self.attn_dropout(att)\n",
+        "        y = att @ v\n",
+        "        y = y.transpose(1, 2).contiguous().view(B, T, C)\n",
+        "\n",
+        "        y = self.resid_dropout(self.c_proj(y))\n",
+        "        return y\n",
+        "\n",
+        "\n",
+        "\n",
+        "class GQA_GPT2Block(nn.Module):\n",
+        "\n",
+        "    def __init__(self):\n",
+        "        super().__init__()\n",
+        "        self.ln_1 = nn.LayerNorm((n_embd,), eps=1e-05, elementwise_affine=True)\n",
+        "        self.attn = GQA_GPT2Attention()\n",
+        "        self.ln_2 = nn.LayerNorm((n_embd,), eps=1e-05, elementwise_affine=True)\n",
+        "        self.mlp = GPT2MLP()\n",
+        "\n",
+        "    def forward(self, x):\n",
+        "        x = x + self.attn(self.ln_1(x))\n",
+        "        x = x + self.mlp(self.ln_2(x))\n",
+        "        return x\n",
+        "\n",
+        "\n",
+        "class GQA_GPT(nn.Module):\n",
+        "\n",
+        "    def __init__(self):\n",
+        "        super().__init__()\n",
+        "\n",
+        "        self.transformer = nn.ModuleDict(dict(\n",
+        "            wte = nn.Embedding(vocab_size, n_embd),\n",
+        "            wpe = nn.Embedding(block_size, n_embd),\n",
+        "\n",
+        "            drop = nn.Dropout(dropout),\n",
+        "            h = nn.ModuleList([GQA_GPT2Block() for _ in range(n_layer)]),\n",
+        "            ln_f = nn.LayerNorm((n_embd,), eps=1e-05, elementwise_affine=True),\n",
+        "        ))\n",
+        "        self.lm_head = nn.Linear(n_embd, vocab_size, bias=False)\n",
+        "\n",
+        "    def forward(self, idx, targets=None):\n",
+        "        device = idx.device\n",
+        "        b, t = idx.size()\n",
+        "        pos = torch.arange(0, t, dtype=torch.long, device=device)\n",
+        "\n",
+        "        tok_emb = self.transformer.wte(idx)\n",
+        "        pos_emb = self.transformer.wpe(pos)\n",
+        "\n",
+        "        x = self.transformer.drop(tok_emb + pos_emb)\n",
+        "\n",
+        "        for GPT2Block in self.transformer.h:\n",
+        "            x = GPT2Block(x)\n",
+        "        x = self.transformer.ln_f(x)\n",
+        "\n",
+        "\n",
+        "        if targets is not None:\n",
+        "            logits = self.lm_head(x)\n",
+        "            loss = F.cross_entropy(logits.view(-1, logits.size(-1)), targets.view(-1), ignore_index=-1)\n",
+        "        else:\n",
+        "            logits = self.lm_head(x[:, [-1], :])\n",
+        "            loss = None\n",
+        "\n",
+        "        return logits, loss\n",
+        "\n",
+        "    def generate(self, idx, max_new_tokens):\n",
+        "        for _ in range(max_new_tokens):\n",
+        "\n",
+        "            idx_cond = idx if idx.size(1) <= block_size else idx[:, -block_size:]\n",
+        "\n",
+        "            logits, _ = self(idx_cond)\n",
+        "\n",
+        "            logits = logits[:, -1, :]\n",
+        "\n",
+        "            probs = F.softmax(logits, dim=-1)\n",
+        "            idx_next = torch.multinomial(probs, num_samples=1)\n",
+        "\n",
+        "            idx = torch.cat((idx, idx_next), dim=1)\n",
+        "        return idx"
+      ],
+      "metadata": {
+        "id": "M0Y-X5BRpxjG"
+      },
+      "execution_count": null,
+      "outputs": []
+    },
+    {
+      "cell_type": "code",
+      "source": [
+        "GQA_model = GQA_GPT()\n",
+        "GQA_model.to(device)"
+      ],
+      "metadata": {
+        "colab": {
+          "base_uri": "https://localhost:8080/"
+        },
+        "id": "MUZ_dT7LqRbU",
+        "outputId": "c86b8b76-7ed1-401d-a5bc-c11c17b2d38e"
+      },
+      "execution_count": null,
+      "outputs": [
+        {
+          "output_type": "execute_result",
+          "data": {
+            "text/plain": [
+              "GQA_GPT(\n",
+              "  (transformer): ModuleDict(\n",
+              "    (wte): Embedding(50257, 768)\n",
+              "    (wpe): Embedding(1024, 768)\n",
+              "    (drop): Dropout(p=0.1, inplace=False)\n",
+              "    (h): ModuleList(\n",
+              "      (0-11): 12 x GQA_GPT2Block(\n",
+              "        (ln_1): LayerNorm((768,), eps=1e-05, elementwise_affine=True)\n",
+              "        (attn): GQA_GPT2Attention(\n",
+              "          (attn_dropout): Dropout(p=0.1, inplace=False)\n",
+              "          (resid_dropout): Dropout(p=0.1, inplace=False)\n",
+              "          (c_gattn): Conv1D()\n",
+              "          (c_proj): Conv1D()\n",
+              "        )\n",
+              "        (ln_2): LayerNorm((768,), eps=1e-05, elementwise_affine=True)\n",
+              "        (mlp): GPT2MLP(\n",
+              "          (c_fc): Conv1D()\n",
+              "          (c_proj): Conv1D()\n",
+              "          (act): NewGELUActivation()\n",
+              "          (dropout): Dropout(p=0.1, inplace=False)\n",
+              "        )\n",
+              "      )\n",
+              "    )\n",
+              "    (ln_f): LayerNorm((768,), eps=1e-05, elementwise_affine=True)\n",
+              "  )\n",
+              "  (lm_head): Linear(in_features=768, out_features=50257, bias=False)\n",
+              ")"
+            ]
+          },
+          "metadata": {},
+          "execution_count": 21
+        }
+      ]
+    },
+    {
+      "cell_type": "markdown",
+      "source": [
+        "# Sliding Window Attention"
+      ],
+      "metadata": {
+        "id": "gmsX2QdXqtqv"
+      }
+    },
+    {
+      "cell_type": "code",
+      "source": [
+        "class SWA_GPT2Attention(nn.Module):\n",
+        "\n",
+        "    def __init__(self):\n",
+        "        super().__init__()\n",
+        "        assert n_embd % n_head == 0\n",
+        "\n",
+        "\n",
+        "        self.attn_dropout = nn.Dropout(dropout)\n",
+        "        self.resid_dropout = nn.Dropout(dropout)\n",
+        "        self.n_head = n_head\n",
+        "        self.n_embd = n_embd\n",
+        "        self.dropout = dropout\n",
+        "\n",
+        "\n",
+        "        self.c_sattn = Conv1D(3*self.n_embd, n_embd)\n",
+        "        self.c_proj = Conv1D(n_embd, n_embd)\n",
+        "\n",
+        "        # Here n_w used in sliding_window//2  -> for decoder future tokens weight = 0\n",
+        "        # Lower trainagular matrix with sliding window\n",
+        "        self.register_buffer(\"bias\", torch.tril(torch.triu(torch.ones(block_size,block_size), diagonal=-n_w))\n",
+        "                                    .view(1, 1, block_size, block_size))\n",
+        "\n",
+        "\n",
+        "    # My implementation of Sliding Window {Took too much time for training}\n",
+        "    def sliding_win(self, q, k):\n",
+        "        assert q.shape == k.shape\n",
+        "        B, nh, T, hs = q.size()\n",
+        "\n",
+        "        _qk = torch.full((B, nh, T, T), float('-inf'), device=q.device, dtype=q.dtype)\n",
+        "\n",
+        "        for i in range(T):\n",
+        "            for j in range(i, max(0, i - n_w) - 1, -1):\n",
+        "                _qk[:,:, i, j] = torch.einsum('ijk,ijk -> ij', q[:,:, i], k[:,:, j])\n",
+        "\n",
+        "        return _qk\n",
+        "\n",
+        "\n",
+        "    def forward(self, x):\n",
+        "        B, T, C = x.size()\n",
+        "        x = self.c_sattn(x)\n",
+        "\n",
+        "        q, k, v  = x.split(self.n_embd, dim=2)\n",
+        "\n",
+        "        k = k.view(B, T, self.n_head, C // self.n_head).transpose(1, 2) # (B, nh, T, hs)\n",
+        "        q = q.view(B, T, self.n_head, C // self.n_head).transpose(1, 2) # (B, nh, T, hs)\n",
+        "        v = v.view(B, T, self.n_head, C // self.n_head).transpose(1, 2) # (B, nh, T, hs)\n",
+        "\n",
+        "\n",
+        "        att = (q @ k.transpose(-2, -1)) * (1.0 / math.sqrt(k.size(-1)))\n",
+        "        att = att.masked_fill(self.bias[:,:,:T,:T] == 0, float('-inf'))  # Sliding Window Attention\n",
+        "        att = F.softmax(att, dim=-1)\n",
+        "        att = self.attn_dropout(att)\n",
+        "        y = att @ v\n",
+        "\n",
+        "\n",
+        "\n",
+        "        y = y.transpose(1, 2).contiguous().view(B, T, C)\n",
+        "        y = self.resid_dropout(self.c_proj(y))\n",
+        "        return y\n",
+        "\n",
+        "\n",
+        "class SWA_GPT2Block(nn.Module):\n",
+        "\n",
+        "    def __init__(self):\n",
+        "        super().__init__()\n",
+        "        self.ln_1 = nn.LayerNorm((n_embd,), eps=1e-05, elementwise_affine=True)\n",
+        "        self.attn = SWA_GPT2Attention()\n",
+        "        self.ln_2 = nn.LayerNorm((n_embd,), eps=1e-05, elementwise_affine=True)\n",
+        "        self.mlp = GPT2MLP()\n",
+        "\n",
+        "    def forward(self, x):\n",
+        "        x = x + self.attn(self.ln_1(x))\n",
+        "        x = x + self.mlp(self.ln_2(x))\n",
+        "        return x\n",
+        "\n",
+        "\n",
+        "class SWA_GPT(nn.Module):\n",
+        "\n",
+        "    def __init__(self):\n",
+        "        super().__init__()\n",
+        "\n",
+        "        self.transformer = nn.ModuleDict(dict(\n",
+        "            wte = nn.Embedding(vocab_size, n_embd),\n",
+        "            wpe = nn.Embedding(block_size, n_embd),\n",
+        "\n",
+        "            drop = nn.Dropout(dropout),\n",
+        "            h = nn.ModuleList([SWA_GPT2Block() for _ in range(n_layer)]),\n",
+        "            ln_f = nn.LayerNorm((n_embd,), eps=1e-05, elementwise_affine=True),\n",
+        "        ))\n",
+        "        self.lm_head = nn.Linear(n_embd, vocab_size, bias=False)\n",
+        "\n",
+        "    def forward(self, idx, targets=None):\n",
+        "        device = idx.device\n",
+        "        b, t = idx.size()\n",
+        "        pos = torch.arange(0, t, dtype=torch.long, device=device)\n",
+        "\n",
+        "        tok_emb = self.transformer.wte(idx) # token embeddings of shape (b, t, n_embd)\n",
+        "        pos_emb = self.transformer.wpe(pos) # position embeddings of shape (t, n_embd)\n",
+        "\n",
+        "        x = self.transformer.drop(tok_emb + pos_emb)\n",
+        "        for GPT2Block in self.transformer.h:\n",
+        "            x = GPT2Block(x)\n",
+        "        x = self.transformer.ln_f(x)\n",
+        "\n",
+        "\n",
+        "        if targets is not None:\n",
+        "            logits = self.lm_head(x)\n",
+        "            loss = F.cross_entropy(logits.view(-1, logits.size(-1)), targets.view(-1), ignore_index=-1)\n",
+        "        else:\n",
+        "            logits = self.lm_head(x[:, [-1], :])\n",
+        "            loss = None\n",
+        "\n",
+        "        return logits, loss\n",
+        "\n",
+        "    def generate(self, idx, max_new_tokens):\n",
+        "        for _ in range(max_new_tokens):\n",
+        "\n",
+        "            idx_cond = idx if idx.size(1) <= block_size else idx[:, -block_size:]\n",
+        "\n",
+        "            logits, _ = self(idx_cond)\n",
+        "\n",
+        "            logits = logits[:, -1, :]\n",
+        "\n",
+        "            probs = F.softmax(logits, dim=-1)\n",
+        "            idx_next = torch.multinomial(probs, num_samples=1)\n",
+        "\n",
+        "            idx = torch.cat((idx, idx_next), dim=1)\n",
+        "        return idx"
+      ],
+      "metadata": {
+        "id": "Q6qMmXwrqymt"
+      },
+      "execution_count": null,
+      "outputs": []
+    },
+    {
+      "cell_type": "code",
+      "source": [
+        "SWA_model = GQA_GPT()\n",
+        "SWA_model.to(device)"
+      ],
+      "metadata": {
+        "colab": {
+          "base_uri": "https://localhost:8080/"
+        },
+        "id": "FDoXZgF1rYum",
+        "outputId": "ec6d797e-baf8-4001-a18d-0db2e94f679c"
+      },
+      "execution_count": null,
+      "outputs": [
+        {
+          "output_type": "execute_result",
+          "data": {
+            "text/plain": [
+              "GQA_GPT(\n",
+              "  (transformer): ModuleDict(\n",
+              "    (wte): Embedding(50257, 768)\n",
+              "    (wpe): Embedding(1024, 768)\n",
+              "    (drop): Dropout(p=0.1, inplace=False)\n",
+              "    (h): ModuleList(\n",
+              "      (0-11): 12 x GQA_GPT2Block(\n",
+              "        (ln_1): LayerNorm((768,), eps=1e-05, elementwise_affine=True)\n",
+              "        (attn): GQA_GPT2Attention(\n",
+              "          (attn_dropout): Dropout(p=0.1, inplace=False)\n",
+              "          (resid_dropout): Dropout(p=0.1, inplace=False)\n",
+              "          (c_gattn): Conv1D()\n",
+              "          (c_proj): Conv1D()\n",
+              "        )\n",
+              "        (ln_2): LayerNorm((768,), eps=1e-05, elementwise_affine=True)\n",
+              "        (mlp): GPT2MLP(\n",
+              "          (c_fc): Conv1D()\n",
+              "          (c_proj): Conv1D()\n",
+              "          (act): NewGELUActivation()\n",
+              "          (dropout): Dropout(p=0.1, inplace=False)\n",
+              "        )\n",
+              "      )\n",
+              "    )\n",
+              "    (ln_f): LayerNorm((768,), eps=1e-05, elementwise_affine=True)\n",
+              "  )\n",
+              "  (lm_head): Linear(in_features=768, out_features=50257, bias=False)\n",
+              ")"
+            ]
+          },
+          "metadata": {},
+          "execution_count": 23
+        }
+      ]
+    },
+    {
+      "cell_type": "markdown",
+      "source": [
+        "# Training  \n",
+        "(ref: Let's build GPT: from scratch, in code, spelled out.\n",
+        "Andrej Karpathy)\n",
+        "\n",
+        "Training Model on smaller hyperparameters on tinyShakerspear Model\n"
+      ],
+      "metadata": {
+        "id": "0xcTWtmxrisE"
+      }
+    },
+    {
+      "cell_type": "markdown",
+      "source": [
+        "## Initialisation"
+      ],
+      "metadata": {
+        "id": "BRpOGgs40ks6"
+      }
+    },
+    {
+      "cell_type": "code",
+      "source": [
+        "# hyperparameters 10M\n",
+        "block_size = 256\n",
+        "vocab_size = 65\n",
+        "\n",
+        "device = 'cuda' if torch.cuda.is_available() else 'cpu'\n",
+        "n_embd = 384\n",
+        "n_layer = 6\n",
+        "n_head = 6\n",
+        "n_w = 128\n",
+        "n_g = 3\n",
+        "dropout = 0.1\n",
+        "\n",
+        "batch_size = 16\n",
+        "max_iters = 1000\n",
+        "eval_interval = 50\n",
+        "learning_rate = 1e-3\n",
+        "eval_iters = 20"
+      ],
+      "metadata": {
+        "id": "piwYdUOY16zd"
+      },
+      "execution_count": null,
+      "outputs": []
+    },
+    {
+      "cell_type": "code",
+      "source": [
+        "# Loading TinyShakespear\n",
+        "\n",
+        "# !wget https://raw.githubusercontent.com/karpathy/char-rnn/master/data/tinyshakespeare/input.txt"
+      ],
+      "metadata": {
+        "id": "RHsrhKh8rm8u"
+      },
+      "execution_count": null,
+      "outputs": []
+    },
+    {
+      "cell_type": "code",
+      "source": [
+        "with open('input.txt', 'r', encoding='utf-8') as f:\n",
+        "    text = f.read()"
+      ],
+      "metadata": {
+        "id": "S3l053DOAD8g"
+      },
+      "execution_count": null,
+      "outputs": []
+    },
+    {
+      "cell_type": "code",
+      "source": [
+        "chars = sorted(list(set(text)))\n",
+        "stoi = { ch:i for i,ch in enumerate(chars) }\n",
+        "itos = { i:ch for i,ch in enumerate(chars) }\n",
+        "encode = lambda s: [stoi[c] for c in s]\n",
+        "decode = lambda l: ''.join([itos[i] for i in l])"
+      ],
+      "metadata": {
+        "id": "1Ax8Gvg0sOoQ"
+      },
+      "execution_count": null,
+      "outputs": []
+    },
+    {
+      "cell_type": "code",
+      "source": [
+        "data = torch.tensor(encode(text), dtype=torch.long).to(device)\n",
+        "n = int(0.9*len(data)) # first 90% will be train, rest val\n",
+        "train_data = data[:n]\n",
+        "val_data = data[n:]"
+      ],
+      "metadata": {
+        "id": "bo_mCQwpr9kb"
+      },
+      "execution_count": null,
+      "outputs": []
+    },
+    {
+      "cell_type": "code",
+      "source": [
+        "def get_batch(split):\n",
+        "\n",
+        "    data = train_data if split == 'train' else val_data\n",
+        "    ix = torch.randint(len(data) - block_size, (batch_size,))\n",
+        "    x = torch.stack([data[i:i+block_size] for i in ix])\n",
+        "    y = torch.stack([data[i+1:i+block_size+1] for i in ix])\n",
+        "    x, y = x.to(device), y.to(device)\n",
+        "    return x, y"
+      ],
+      "metadata": {
+        "id": "3BSXNCKvsiAG"
+      },
+      "execution_count": null,
+      "outputs": []
+    },
+    {
+      "cell_type": "code",
+      "source": [
+        "@torch.no_grad()\n",
+        "def estimate_loss():\n",
+        "    out = {}\n",
+        "    m.eval()\n",
+        "    for split in ['train', 'val']:\n",
+        "        losses = torch.zeros(eval_iters)\n",
+        "        for k in range(eval_iters):\n",
+        "            X, Y = get_batch(split)\n",
+        "            X, Y = X.to(device), Y.to(device)\n",
+        "            logits, loss = m(X, Y)\n",
+        "            losses[k] = loss.item()\n",
+        "        out[split] = losses.mean()\n",
+        "    m.train()\n",
+        "    return out"
+      ],
+      "metadata": {
+        "id": "SmaVVlxqtu7_"
+      },
+      "execution_count": null,
+      "outputs": []
+    },
+    {
+      "cell_type": "markdown",
+      "source": [
+        "## Training in Function"
+      ],
+      "metadata": {
+        "id": "mOgq1eQjzXpW"
+      }
+    },
+    {
+      "cell_type": "code",
+      "source": [
+        "def train(m):\n",
+        "    m.to(device)\n",
+        "    optimizer = torch.optim.AdamW(m.parameters(), lr=learning_rate)\n",
+        "    print(sum(p.numel() for p in m.parameters())/1e6, 'M parameters')\n",
+        "\n",
+        "    for iter in range(max_iters):\n",
+        "\n",
+        "        if iter % eval_interval == 0 or iter == max_iters - 1:\n",
+        "            losses = estimate_loss()\n",
+        "            print(f\"step {iter}: train loss {losses['train']:.4f}, val loss {losses['val']:.4f}\")\n",
+        "\n",
+        "        xb, yb = get_batch('train')\n",
+        "        logits, loss = m(xb, yb)\n",
+        "        optimizer.zero_grad(set_to_none=True)\n",
+        "        loss.backward()\n",
+        "        optimizer.step()"
+      ],
+      "metadata": {
+        "id": "-ZkSMjBEyEr3"
+      },
+      "execution_count": null,
+      "outputs": []
+    },
+    {
+      "cell_type": "code",
+      "source": [
+        "def check(m):\n",
+        "    context = torch.zeros((1, 1), dtype=torch.long, device=device)\n",
+        "    print(decode(m.generate(context, max_new_tokens=500)[0].tolist()))"
+      ],
+      "metadata": {
+        "id": "xC4qv8940VlR"
+      },
+      "execution_count": null,
+      "outputs": []
+    },
+    {
+      "cell_type": "markdown",
+      "source": [
+        "## Current Params"
+      ],
+      "metadata": {
+        "id": "Hu_8GV2iToRc"
+      }
+    },
+    {
+      "cell_type": "code",
+      "source": [
+        "# hyperparameters 10M\n",
+        "block_size = 256\n",
+        "vocab_size = 65\n",
+        "\n",
+        "device = 'cuda' if torch.cuda.is_available() else 'cpu'\n",
+        "n_embd = 384\n",
+        "n_layer = 6\n",
+        "n_head = 6\n",
+        "n_w = 128\n",
+        "n_g = 3\n",
+        "dropout = 0.1\n",
+        "\n",
+        "batch_size = 1\n",
+        "max_iters = 1000\n",
+        "eval_interval = 50\n",
+        "learning_rate = 1e-3\n",
+        "eval_iters = 20"
+      ],
+      "metadata": {
+        "id": "LM8kT_s8T6KK"
+      },
+      "execution_count": null,
+      "outputs": []
+    },
+    {
+      "cell_type": "markdown",
+      "source": [
+        "### Training Basic GPT"
+      ],
+      "metadata": {
+        "id": "Qr3gO_3-0Rpi"
+      }
+    },
+    {
+      "cell_type": "code",
+      "source": [
+        "m = BasicGPT()\n",
+        "train(m)"
+      ],
+      "metadata": {
+        "colab": {
+          "base_uri": "https://localhost:8080/"
+        },
+        "id": "Jw0IfruZCTBM",
+        "outputId": "23918149-c1bf-448d-81df-d1d189c9602a"
+      },
+      "execution_count": null,
+      "outputs": [
+        {
+          "output_type": "stream",
+          "name": "stdout",
+          "text": [
+            "10.795776 M parameters\n",
+            "step 0: train loss 4.3574, val loss 4.3550\n",
+            "step 50: train loss 2.6762, val loss 2.6656\n",
+            "step 100: train loss 2.6628, val loss 2.6296\n",
+            "step 150: train loss 2.5776, val loss 2.5832\n",
+            "step 200: train loss 2.5795, val loss 2.5279\n",
+            "step 250: train loss 2.5666, val loss 2.5959\n",
+            "step 300: train loss 2.5746, val loss 2.5766\n",
+            "step 350: train loss 2.5359, val loss 2.5412\n",
+            "step 400: train loss 2.5161, val loss 2.4948\n",
+            "step 450: train loss 2.5121, val loss 2.5795\n",
+            "step 500: train loss 2.5561, val loss 2.5282\n",
+            "step 550: train loss 2.5442, val loss 2.5640\n",
+            "step 600: train loss 2.5465, val loss 2.4804\n",
+            "step 650: train loss 2.4937, val loss 2.5268\n",
+            "step 700: train loss 2.5084, val loss 2.5218\n",
+            "step 750: train loss 2.5256, val loss 2.5276\n",
+            "step 800: train loss 2.5149, val loss 2.5088\n",
+            "step 850: train loss 2.5114, val loss 2.5230\n",
+            "step 900: train loss 2.4932, val loss 2.5426\n",
+            "step 950: train loss 2.4938, val loss 2.5581\n",
+            "step 999: train loss 2.4939, val loss 2.5230\n"
+          ]
+        }
+      ]
+    },
+    {
+      "cell_type": "code",
+      "source": [
+        "check(m)"
+      ],
+      "metadata": {
+        "colab": {
+          "base_uri": "https://localhost:8080/"
+        },
+        "id": "MwJ38jKOCXzp",
+        "outputId": "ab7f0acf-e9ea-46de-bb42-5a992d11c1b8"
+      },
+      "execution_count": null,
+      "outputs": [
+        {
+          "output_type": "stream",
+          "name": "stdout",
+          "text": [
+            "\n",
+            "INGo or\n",
+            "Wh ghungind\n",
+            "sm\n",
+            "Thi, p a anhbug tiont, UCHUSA: y utidst y hay d MI lds wik bo suland.\n",
+            "CENTINICKISere he parsan IOnd? he,\n",
+            "\n",
+            "MIIII:\n",
+            "Whive h-d o HEOLINELIENIOLIUCKICLakiler d th.\n",
+            "TUSIUSA, he; d hisimas he ayoann beg-\n",
+            "qurib,\n",
+            "PHENom ind finende,\n",
+            "Senthe br br ke bur hrd.\n",
+            "Wikeimilon-Whyo f boinenta-BEODTENUS:\n",
+            "\n",
+            "IA of f beellif ouaso herous tyot shend:\n",
+            "CArllendbthth ake d hinentrdiy thot bdg.\n",
+            "Mohe p buld sou,\n",
+            "FELPrt puce ang tyo le and anevewt dl g, hemesno be th inaimenturays. ste callinke ts t fa\n"
+          ]
+        }
+      ]
+    },
+    {
+      "cell_type": "markdown",
+      "source": [
+        "### Training Rotary GPT"
+      ],
+      "metadata": {
+        "id": "HZSqLApuCMPN"
+      }
+    },
+    {
+      "cell_type": "code",
+      "source": [
+        "m = RotaryGPT()\n",
+        "train(m)"
+      ],
+      "metadata": {
+        "colab": {
+          "base_uri": "https://localhost:8080/"
+        },
+        "id": "xmpM_Fshzy0_",
+        "outputId": "1b1a26c8-5ef4-43dd-9152-859121f39576"
+      },
+      "execution_count": null,
+      "outputs": [
+        {
+          "output_type": "stream",
+          "name": "stdout",
+          "text": [
+            "10.795776 M parameters\n",
+            "step 0: train loss 4.3774, val loss 4.3838\n",
+            "step 50: train loss 2.6712, val loss 2.6487\n",
+            "step 100: train loss 2.5220, val loss 2.5362\n",
+            "step 150: train loss 2.4357, val loss 2.4142\n",
+            "step 200: train loss 2.3140, val loss 2.3259\n",
+            "step 250: train loss 2.3314, val loss 2.3501\n",
+            "step 300: train loss 2.2513, val loss 2.3271\n",
+            "step 350: train loss 2.2508, val loss 2.3180\n",
+            "step 400: train loss 2.3048, val loss 2.2808\n",
+            "step 450: train loss 2.1951, val loss 2.2215\n",
+            "step 500: train loss 2.2075, val loss 2.2134\n",
+            "step 550: train loss 2.1943, val loss 2.2444\n",
+            "step 600: train loss 2.1714, val loss 2.2064\n",
+            "step 650: train loss 2.1715, val loss 2.2109\n",
+            "step 700: train loss 2.1146, val loss 2.1873\n",
+            "step 750: train loss 2.1367, val loss 2.2342\n",
+            "step 800: train loss 2.1258, val loss 2.1123\n",
+            "step 850: train loss 2.0706, val loss 2.1303\n",
+            "step 900: train loss 2.0342, val loss 2.1275\n",
+            "step 950: train loss 2.0914, val loss 2.1523\n",
+            "step 999: train loss 2.0332, val loss 2.1609\n"
+          ]
+        }
+      ]
+    },
+    {
+      "cell_type": "code",
+      "source": [
+        "check(m)"
+      ],
+      "metadata": {
+        "colab": {
+          "base_uri": "https://localhost:8080/"
+        },
+        "id": "P4QGduzS3TdJ",
+        "outputId": "979cbe97-8f8b-46e7-be25-13d30a9c2361"
+      },
+      "execution_count": null,
+      "outputs": [
+        {
+          "output_type": "stream",
+          "name": "stdout",
+          "text": [
+            "\n",
+            "ENGRDTizastyerm! will wars wheld, thim pratiselt of mintint the hivey my! Mope. Shat muky ourwe toul!\n",
+            "My mark te my hristais lol denmase warnd pothe,\n",
+            "Witheer by frike nobunable sough dungar ot sterr't ine ctaite I thy ou noy\n",
+            "FosI so ards elownd not so wurin ow doward oure,\n",
+            "The nour that mak not thas ave preaver subence.\n",
+            "\n",
+            "MRINED:\n",
+            "\n",
+            "It here keale nelt mauciinme brano prrofn:\n",
+            "\n",
+            "Buck asespenrine with the mutigisser's\n",
+            "moneer loves an ownce hart,\n",
+            "Awany, the, prounenn wiclst 'rastoe-hew.\n",
+            "\n",
+            "DRIUS ACUSS:\n",
+            "Li\n"
+          ]
+        }
+      ]
+    },
+    {
+      "cell_type": "markdown",
+      "source": [
+        "### Training GQA GPT"
+      ],
+      "metadata": {
+        "id": "No7QKlN0CilO"
+      }
+    },
+    {
+      "cell_type": "code",
+      "source": [
+        "m = GQA_GPT()\n",
+        "train(m)"
+      ],
+      "metadata": {
+        "colab": {
+          "base_uri": "https://localhost:8080/"
+        },
+        "id": "RdU-EfV3CpMU",
+        "outputId": "f55f7d49-657d-442f-8684-243799e9143f"
+      },
+      "execution_count": null,
+      "outputs": [
+        {
+          "output_type": "stream",
+          "name": "stdout",
+          "text": [
+            "10.795776 M parameters\n",
+            "step 0: train loss 4.3476, val loss 4.3653\n",
+            "step 50: train loss 2.6581, val loss 2.6532\n",
+            "step 100: train loss 2.6136, val loss 2.6020\n",
+            "step 150: train loss 2.5837, val loss 2.5801\n",
+            "step 200: train loss 2.5199, val loss 2.5864\n",
+            "step 250: train loss 2.5692, val loss 2.5774\n",
+            "step 300: train loss 2.5568, val loss 2.6259\n",
+            "step 350: train loss 2.5400, val loss 2.6012\n",
+            "step 400: train loss 2.5323, val loss 2.5414\n",
+            "step 450: train loss 2.5556, val loss 2.5488\n",
+            "step 500: train loss 2.5545, val loss 2.5919\n",
+            "step 550: train loss 2.5264, val loss 2.5386\n",
+            "step 600: train loss 2.5397, val loss 2.5393\n",
+            "step 650: train loss 2.5370, val loss 2.5648\n",
+            "step 700: train loss 2.5349, val loss 2.5386\n",
+            "step 750: train loss 2.5071, val loss 2.5130\n",
+            "step 800: train loss 2.5227, val loss 2.5299\n",
+            "step 850: train loss 2.4963, val loss 2.5742\n",
+            "step 900: train loss 2.5471, val loss 2.5073\n",
+            "step 950: train loss 2.5236, val loss 2.5030\n",
+            "step 999: train loss 2.5273, val loss 2.5669\n"
+          ]
+        }
+      ]
+    },
+    {
+      "cell_type": "code",
+      "source": [
+        "check(m)"
+      ],
+      "metadata": {
+        "colab": {
+          "base_uri": "https://localhost:8080/"
+        },
+        "id": "jIbhE1juCukX",
+        "outputId": "7e5101a8-becc-40f5-a1e5-5e09b943e1e2"
+      },
+      "execution_count": null,
+      "outputs": [
+        {
+          "output_type": "stream",
+          "name": "stdout",
+          "text": [
+            "\n",
+            "\n",
+            "WDWSLLFLOOLI cay mrid whmamy lyosthenithat I RICound sedareenctrerind plesuto bethavese ano seisee,\n",
+            "Mo h menadis.\n",
+            "Gou to mad narevers ifeteiisshif winlerd, shy letwicene.\n",
+            "M? emy mefe g,\n",
+            "Ag, avishe; besilindeth Ys isosif: thefel th w! ser s hullove omathe tinithith ind,\n",
+            "Walere hathid garivebed heronoushethis-hicengheano\n",
+            "I fftyothos n owandooulsth s heand he! ysinouloncoorerteeomareld anashialoweis met and memary wandes tha ceds hnive t wourn,\n",
+            "PIt bofo lanenok y otheeice\n",
+            "TELTE\n",
+            "TTOManghacou,\n",
+            "ENTor\n"
+          ]
+        }
+      ]
+    },
+    {
+      "cell_type": "markdown",
+      "source": [
+        "### Training SWA GPT"
+      ],
+      "metadata": {
+        "id": "NttVw0liDAEK"
+      }
+    },
+    {
+      "cell_type": "code",
+      "source": [
+        "n_w = 3\n",
+        "m = SWA_GPT()\n",
+        "train(m)"
+      ],
+      "metadata": {
+        "colab": {
+          "base_uri": "https://localhost:8080/"
+        },
+        "id": "gBJwLYz_C3xv",
+        "outputId": "a6c7bd94-0c02-4f5c-fa26-ae3988c05538"
+      },
+      "execution_count": null,
+      "outputs": [
+        {
+          "output_type": "stream",
+          "name": "stdout",
+          "text": [
+            "10.795776 M parameters\n",
+            "step 0: train loss 4.3013, val loss 4.3005\n",
+            "step 50: train loss 2.5823, val loss 2.5885\n",
+            "step 100: train loss 2.4929, val loss 2.4730\n",
+            "step 150: train loss 2.3891, val loss 2.3808\n",
+            "step 200: train loss 2.3297, val loss 2.3967\n",
+            "step 250: train loss 2.2752, val loss 2.3102\n",
+            "step 300: train loss 2.3006, val loss 2.3274\n",
+            "step 350: train loss 2.2895, val loss 2.3252\n",
+            "step 400: train loss 2.2577, val loss 2.3019\n",
+            "step 450: train loss 2.2419, val loss 2.2764\n",
+            "step 500: train loss 2.1840, val loss 2.1944\n",
+            "step 550: train loss 2.1821, val loss 2.2704\n",
+            "step 600: train loss 2.1845, val loss 2.1914\n",
+            "step 650: train loss 2.1912, val loss 2.2054\n",
+            "step 700: train loss 2.2076, val loss 2.2155\n",
+            "step 750: train loss 2.1398, val loss 2.1972\n",
+            "step 800: train loss 2.1641, val loss 2.2390\n",
+            "step 850: train loss 2.1435, val loss 2.1474\n",
+            "step 900: train loss 2.0844, val loss 2.1491\n",
+            "step 950: train loss 2.0949, val loss 2.2044\n",
+            "step 999: train loss 2.0741, val loss 2.1215\n"
+          ]
+        }
+      ]
+    },
+    {
+      "cell_type": "code",
+      "source": [
+        "check(m)"
+      ],
+      "metadata": {
+        "colab": {
+          "base_uri": "https://localhost:8080/"
+        },
+        "id": "JJyg2xlFDMGI",
+        "outputId": "30a50faa-e3d7-4b7a-dad5-e8d6f5fe5a6f"
+      },
+      "execution_count": null,
+      "outputs": [
+        {
+          "output_type": "stream",
+          "name": "stdout",
+          "text": [
+            "\n",
+            "Be oligng is have I make what premuestrarsa wore-theyme:\n",
+            "Thtou hence\n",
+            "Tolldringrous hease\n",
+            "I to a drsourmels: efenit below batts. Hit here bungats in lor.\n",
+            "We Stre meas. leccanmeast;\n",
+            "Texper Vwith, his hatt evim thall?\n",
+            "Theme re tre she with thear ithat?\n",
+            "\n",
+            "Which mand shave.\n",
+            "Come ucam\n",
+            "Tent-to so? larclloign you wherd I that shey  lerrs her sonsedr; that on is senalle.\n",
+            "That there upeent?\n",
+            "With as I eert not gan should the holsbrer as. lerearr fe.\n",
+            "Dut that to kis whet waseld stay?\n",
+            "Pur do me or wich iof ma\n"
+          ]
+        }
+      ]
+    },
+    {
+      "cell_type": "markdown",
+      "source": [
+        "## Current Params 2"
+      ],
+      "metadata": {
+        "id": "sP3WXpjkUHbb"
+      }
+    },
+    {
+      "cell_type": "code",
+      "source": [
+        "# hyperparameters 10M\n",
+        "block_size = 256\n",
+        "vocab_size = 65\n",
+        "\n",
+        "device = 'cuda' if torch.cuda.is_available() else 'cpu'\n",
+        "n_embd = 384\n",
+        "n_layer = 6\n",
+        "n_head = 6\n",
+        "n_w = 128\n",
+        "n_g = 3\n",
+        "dropout = 0.1\n",
+        "\n",
+        "batch_size = 16\n",
+        "max_iters = 1000\n",
+        "eval_interval = 50\n",
+        "learning_rate = 1e-3\n",
+        "eval_iters = 20"
+      ],
+      "metadata": {
+        "id": "7d1fI4_RUHbo"
+      },
+      "execution_count": null,
+      "outputs": []
+    },
+    {
+      "cell_type": "markdown",
+      "source": [
+        "### Training Basic GPT"
+      ],
+      "metadata": {
+        "id": "xik4YMMwUHbp"
+      }
+    },
+    {
+      "cell_type": "code",
+      "source": [
+        "m = BasicGPT()\n",
+        "train(m)"
+      ],
+      "metadata": {
+        "colab": {
+          "base_uri": "https://localhost:8080/"
+        },
+        "outputId": "27f39461-063b-4a38-b5d2-d4aee3ca1770",
+        "id": "yrq1qaZNUHbp"
+      },
+      "execution_count": null,
+      "outputs": [
+        {
+          "output_type": "stream",
+          "name": "stdout",
+          "text": [
+            "10.795776 M parameters\n",
+            "step 0: train loss 4.2929, val loss 4.3022\n",
+            "step 50: train loss 2.5099, val loss 2.5221\n",
+            "step 100: train loss 2.4721, val loss 2.5102\n",
+            "step 150: train loss 2.4306, val loss 2.4703\n",
+            "step 200: train loss 2.3746, val loss 2.4054\n",
+            "step 250: train loss 2.2598, val loss 2.3136\n",
+            "step 300: train loss 2.1430, val loss 2.2012\n",
+            "step 350: train loss 2.0255, val loss 2.1307\n",
+            "step 400: train loss 1.9338, val loss 2.0543\n",
+            "step 450: train loss 1.8437, val loss 2.0078\n",
+            "step 500: train loss 1.8078, val loss 1.9589\n",
+            "step 550: train loss 1.7671, val loss 1.8949\n",
+            "step 600: train loss 1.7172, val loss 1.8865\n",
+            "step 650: train loss 1.6881, val loss 1.8564\n",
+            "step 700: train loss 1.6410, val loss 1.8168\n",
+            "step 750: train loss 1.6278, val loss 1.8035\n",
+            "step 800: train loss 1.6125, val loss 1.7670\n",
+            "step 850: train loss 1.5932, val loss 1.7605\n",
+            "step 900: train loss 1.5594, val loss 1.7322\n",
+            "step 950: train loss 1.5388, val loss 1.7150\n",
+            "step 999: train loss 1.5207, val loss 1.6886\n"
+          ]
+        }
+      ]
+    },
+    {
+      "cell_type": "code",
+      "source": [
+        "check(m)"
+      ],
+      "metadata": {
+        "colab": {
+          "base_uri": "https://localhost:8080/"
+        },
+        "id": "9YSlSn7XUHbp",
+        "outputId": "4aa0bcfb-f56c-4df0-8b68-f309f75d77df"
+      },
+      "execution_count": null,
+      "outputs": [
+        {
+          "output_type": "stream",
+          "name": "stdout",
+          "text": [
+            "\n",
+            "DUKE OF YORK:\n",
+            "I was the hupall'd unks astill: on my degent?\n",
+            "\n",
+            "QUEEN ELIZABETH:\n",
+            "So, thy a from cantion lord: atking he a wouldere curse\n",
+            "The pewor as slave on all do uncas\n",
+            "What I the you had when the busin a garn,\n",
+            "Is thers accast the exe in unidarnisengs-sweet in wrettom.\n",
+            "Here she wordshall nobe past's whod, that that runbegr,\n",
+            "But, shall pay your ungrage mot zeterton my les!\n",
+            "Hath me, thus from as I would mands on you swordiere you palies'd,\n",
+            "Make part it fas Mybragiar,\n",
+            "In our love, in your far ighe \n"
+          ]
+        }
+      ]
+    },
+    {
+      "cell_type": "markdown",
+      "source": [
+        "### Training Rotary GPT"
+      ],
+      "metadata": {
+        "id": "BUubYt-7UHbp"
+      }
+    },
+    {
+      "cell_type": "code",
+      "source": [
+        "m = RotaryGPT()\n",
+        "train(m)"
+      ],
+      "metadata": {
+        "colab": {
+          "base_uri": "https://localhost:8080/"
+        },
+        "id": "1aTFX-FyUHbp",
+        "outputId": "35c97ba9-d9dd-4f6b-9d53-50e94c4f4a99"
+      },
+      "execution_count": null,
+      "outputs": [
+        {
+          "output_type": "stream",
+          "name": "stdout",
+          "text": [
+            "10.795776 M parameters\n",
+            "step 0: train loss 4.3289, val loss 4.3328\n",
+            "step 50: train loss 2.3511, val loss 2.3613\n",
+            "step 100: train loss 2.0892, val loss 2.1358\n",
+            "step 150: train loss 1.9238, val loss 2.0158\n",
+            "step 200: train loss 1.7976, val loss 1.9435\n",
+            "step 250: train loss 1.7289, val loss 1.8954\n",
+            "step 300: train loss 1.6602, val loss 1.8326\n",
+            "step 350: train loss 1.6209, val loss 1.7939\n",
+            "step 400: train loss 1.5904, val loss 1.7719\n",
+            "step 450: train loss 1.5632, val loss 1.7203\n",
+            "step 500: train loss 1.5346, val loss 1.7289\n",
+            "step 550: train loss 1.5115, val loss 1.7016\n",
+            "step 600: train loss 1.4842, val loss 1.6625\n",
+            "step 650: train loss 1.4675, val loss 1.6565\n",
+            "step 700: train loss 1.4271, val loss 1.6669\n",
+            "step 750: train loss 1.4232, val loss 1.6266\n",
+            "step 800: train loss 1.3996, val loss 1.6382\n",
+            "step 850: train loss 1.4098, val loss 1.6228\n",
+            "step 900: train loss 1.4028, val loss 1.6062\n",
+            "step 950: train loss 1.3864, val loss 1.5902\n",
+            "step 999: train loss 1.3772, val loss 1.5698\n"
+          ]
+        }
+      ]
+    },
+    {
+      "cell_type": "code",
+      "source": [
+        "check(m)"
+      ],
+      "metadata": {
+        "colab": {
+          "base_uri": "https://localhost:8080/"
+        },
+        "id": "9hBPoUcFUHbq",
+        "outputId": "1194ec6f-de8b-4969-ed20-05ed278bd9ed"
+      },
+      "execution_count": null,
+      "outputs": [
+        {
+          "output_type": "stream",
+          "name": "stdout",
+          "text": [
+            "\n",
+            "Why, hereily well, jest, little fair, I wit\n",
+            "That she yououghts for that said spit us heel\n",
+            "To your masXman's poor with house or torn;\n",
+            "Your off said prince of counsel Trius!\n",
+            "\n",
+            "SICINIUS:\n",
+            "Reverce and never that remembors with thy bodys'\n",
+            "No; batte he tapce his friar word. Gentle's thought Warmiud thates,\n",
+            "I, tushme woming of the Edward's near.\n",
+            "We and city the lord, and play.\n",
+            "\n",
+            "MENENIUS:\n",
+            "Take us thou hast not wiching,\n",
+            "Deach his penrigh's are dauged with gaoes\n",
+            "Hath calmits out as love shame actout sound t\n"
+          ]
+        }
+      ]
+    },
+    {
+      "cell_type": "markdown",
+      "source": [
+        "### Training GQA GPT"
+      ],
+      "metadata": {
+        "id": "NNTVrmvFUHbq"
+      }
+    },
+    {
+      "cell_type": "code",
+      "source": [
+        "m = GQA_GPT()\n",
+        "train(m)"
+      ],
+      "metadata": {
+        "colab": {
+          "base_uri": "https://localhost:8080/"
+        },
+        "id": "fMD4cNvRUHbq",
+        "outputId": "e9f78986-cee4-4578-ba9b-829a2050172a"
+      },
+      "execution_count": null,
+      "outputs": [
+        {
+          "output_type": "stream",
+          "name": "stdout",
+          "text": [
+            "10.795776 M parameters\n",
+            "step 0: train loss 4.3157, val loss 4.3066\n",
+            "step 50: train loss 2.5104, val loss 2.5307\n",
+            "step 100: train loss 2.4746, val loss 2.4982\n",
+            "step 150: train loss 2.4468, val loss 2.4715\n",
+            "step 200: train loss 2.4100, val loss 2.4469\n",
+            "step 250: train loss 2.3546, val loss 2.4171\n",
+            "step 300: train loss 2.2535, val loss 2.3001\n",
+            "step 350: train loss 2.1415, val loss 2.2234\n",
+            "step 400: train loss 2.0576, val loss 2.1608\n",
+            "step 450: train loss 2.0001, val loss 2.0759\n",
+            "step 500: train loss 1.9122, val loss 2.0162\n",
+            "step 550: train loss 1.8439, val loss 1.9848\n",
+            "step 600: train loss 1.7888, val loss 1.9312\n",
+            "step 650: train loss 1.7500, val loss 1.8925\n",
+            "step 700: train loss 1.7011, val loss 1.8622\n",
+            "step 750: train loss 1.6869, val loss 1.8210\n",
+            "step 800: train loss 1.6315, val loss 1.8029\n",
+            "step 850: train loss 1.6121, val loss 1.7800\n",
+            "step 900: train loss 1.5912, val loss 1.7700\n",
+            "step 950: train loss 1.5662, val loss 1.7504\n",
+            "step 999: train loss 1.5499, val loss 1.7278\n"
+          ]
+        }
+      ]
+    },
+    {
+      "cell_type": "code",
+      "source": [
+        "check(m)"
+      ],
+      "metadata": {
+        "colab": {
+          "base_uri": "https://localhost:8080/"
+        },
+        "id": "oYJdBNXrUHbq",
+        "outputId": "9e8c3b85-9c22-4f27-8999-d6b2e9266e45"
+      },
+      "execution_count": null,
+      "outputs": [
+        {
+          "output_type": "stream",
+          "name": "stdout",
+          "text": [
+            "\n",
+            "This trance of WollZnurlickle us to rumphent dought;\n",
+            "Will preaL, and to be deneed, here in being be with.\n",
+            "Kindred tell to sen show rand have awftery is sent\n",
+            "laward her moid the from oes of forth the\n",
+            "sumple of by Abenoubois conted entent\n",
+            "in merchmemand and on thy granness of a cas me,\n",
+            "Ay, or,\n",
+            "Sir, awitis lost ly thou seenstle; for not gair vigar,\n",
+            "And devillas me joy\n",
+            "That let brod I much thee\n",
+            "Shat may man have necelt wirs face have at shame it her\n",
+            "intry warby Naugble offerorfire,\n",
+            "Than till, Romeo \n"
+          ]
+        }
+      ]
+    },
+    {
+      "cell_type": "markdown",
+      "source": [
+        "### Training SWA GPT"
+      ],
+      "metadata": {
+        "id": "p5ZOQfQ5UHbq"
+      }
+    },
+    {
+      "cell_type": "code",
+      "source": [
+        "n_w = 12\n",
+        "m = SWA_GPT()\n",
+        "train(m)"
+      ],
+      "metadata": {
+        "colab": {
+          "base_uri": "https://localhost:8080/"
+        },
+        "id": "ZPMC2MyZUHbr",
+        "outputId": "b1df278b-c934-4420-f454-182d69d10096"
+      },
+      "execution_count": null,
+      "outputs": [
+        {
+          "output_type": "stream",
+          "name": "stdout",
+          "text": [
+            "10.795776 M parameters\n",
+            "step 0: train loss 4.3717, val loss 4.3767\n",
+            "step 50: train loss 2.4029, val loss 2.4202\n",
+            "step 100: train loss 2.2391, val loss 2.2527\n",
+            "step 150: train loss 2.0704, val loss 2.1303\n",
+            "step 200: train loss 1.9765, val loss 2.0727\n",
+            "step 250: train loss 1.8598, val loss 1.9537\n",
+            "step 300: train loss 1.7912, val loss 1.9527\n",
+            "step 350: train loss 1.7484, val loss 1.9097\n",
+            "step 400: train loss 1.7084, val loss 1.8672\n",
+            "step 450: train loss 1.6402, val loss 1.8376\n",
+            "step 500: train loss 1.6130, val loss 1.8084\n",
+            "step 550: train loss 1.5812, val loss 1.7733\n",
+            "step 600: train loss 1.5719, val loss 1.7803\n",
+            "step 650: train loss 1.5351, val loss 1.7539\n",
+            "step 700: train loss 1.5044, val loss 1.7080\n",
+            "step 750: train loss 1.5044, val loss 1.6866\n",
+            "step 800: train loss 1.4726, val loss 1.6778\n",
+            "step 850: train loss 1.4476, val loss 1.6597\n",
+            "step 900: train loss 1.4565, val loss 1.6437\n",
+            "step 950: train loss 1.4362, val loss 1.6419\n",
+            "step 999: train loss 1.4199, val loss 1.6402\n"
+          ]
+        }
+      ]
+    },
+    {
+      "cell_type": "code",
+      "source": [
+        "check(m)"
+      ],
+      "metadata": {
+        "colab": {
+          "base_uri": "https://localhost:8080/"
+        },
+        "id": "c4cvAyjtUHbr",
+        "outputId": "b11a5cf1-7bbc-4c76-8364-029556c22fa4"
+      },
+      "execution_count": null,
+      "outputs": [
+        {
+          "output_type": "stream",
+          "name": "stdout",
+          "text": [
+            "\n",
+            "iYles EDeral:\n",
+            "But be the vein to met thee behood doot\n",
+            "Of I,  with you'll tell enjoyio!\n",
+            "We makes able me, breech your land, too.\n",
+            "\n",
+            "EXen:\n",
+            "AUxIUS:\n",
+            "Ever you do shouldier be men from my fair\n",
+            "From shroud for his we may, and make holy is!\n",
+            "\n",
+            "CAPULET:\n",
+            "Thereweein look, and me now I did!\n",
+            "\n",
+            "MLIADY LARENCE:\n",
+            "How it comes, if you rounds,\n",
+            "Not, at thee, by to Harbertune,\n",
+            "pleer choos, whose mist you? wantied return;\n",
+            "And they form parilg sworning out as for the crae,\n",
+            "But art to her follow; and no thee,\n",
+            "Dremembled sho\n"
+          ]
+        }
+      ]
+    },
+    {
+      "cell_type": "markdown",
+      "source": [
+        "## Current Params 3"
+      ],
+      "metadata": {
+        "id": "BZqpY6hJXXIw"
+      }
+    },
+    {
+      "cell_type": "code",
+      "source": [
+        "# hyperparameters 10M\n",
+        "block_size = 256\n",
+        "vocab_size = 65\n",
+        "\n",
+        "device = 'cuda' if torch.cuda.is_available() else 'cpu'\n",
+        "n_embd = 384\n",
+        "n_layer = 6\n",
+        "n_head = 6\n",
+        "n_w = 128\n",
+        "n_g = 3\n",
+        "dropout = 0.1\n",
+        "\n",
+        "batch_size = 16\n",
+        "max_iters = 5000\n",
+        "eval_interval = 500\n",
+        "learning_rate = 1e-3\n",
+        "eval_iters = 200"
+      ],
+      "metadata": {
+        "id": "oGMimxA1XXJI"
+      },
+      "execution_count": null,
+      "outputs": []
+    },
+    {
+      "cell_type": "markdown",
+      "source": [
+        "### Training Basic GPT"
+      ],
+      "metadata": {
+        "id": "Ecwm4bsQXXJJ"
+      }
+    },
+    {
+      "cell_type": "code",
+      "source": [
+        "m = BasicGPT()\n",
+        "train(m)"
+      ],
+      "metadata": {
+        "colab": {
+          "base_uri": "https://localhost:8080/"
+        },
+        "outputId": "8e4027b3-7c4a-4c32-9a2d-7e0b9022d1bd",
+        "id": "Kdr37uf6XXJJ"
+      },
+      "execution_count": null,
+      "outputs": [
+        {
+          "output_type": "stream",
+          "name": "stdout",
+          "text": [
+            "10.795776 M parameters\n",
+            "step 0: train loss 4.2958, val loss 4.3038\n",
+            "step 500: train loss 1.8297, val loss 1.9676\n",
+            "step 1000: train loss 1.5116, val loss 1.7011\n",
+            "step 1500: train loss 1.3871, val loss 1.5963\n",
+            "step 2000: train loss 1.3137, val loss 1.5564\n",
+            "step 2500: train loss 1.2611, val loss 1.5220\n",
+            "step 3000: train loss 1.2139, val loss 1.5085\n",
+            "step 3500: train loss 1.1767, val loss 1.4805\n",
+            "step 4000: train loss 1.1433, val loss 1.4818\n",
+            "step 4500: train loss 1.1150, val loss 1.4915\n",
+            "step 4999: train loss 1.0875, val loss 1.4857\n"
+          ]
+        }
+      ]
+    },
+    {
+      "cell_type": "code",
+      "source": [
+        "check(m)"
+      ],
+      "metadata": {
+        "colab": {
+          "base_uri": "https://localhost:8080/"
+        },
+        "outputId": "88c44b05-ac1b-4151-a704-ab86ae899523",
+        "id": "_BQCgDS6XXJK"
+      },
+      "execution_count": null,
+      "outputs": [
+        {
+          "output_type": "stream",
+          "name": "stdout",
+          "text": [
+            "\n",
+            "Out shall trouble from thee, thou shalt deep by\n",
+            "pace, marry, horse, with other man.\n",
+            "That I have, like my father's displace;\n",
+            "The pain deliver'd have mhate me leave--\n",
+            "My pensions murder with mind I with thee!\n",
+            "Is not nothing doing! O hear me cock I of ransg!\n",
+            "Women flowers, look with her; judgment, than duke's grows,\n",
+            "Stranderages true Better last nettled and hear\n",
+            "Nor remusness : speak, it affright, rure rest\n",
+            "Unless my affence most joys.\n",
+            "If answer loyalive, sirrel.\n",
+            "\n",
+            "CLARENCE:\n",
+            "Titus Lartius take truth\n"
+          ]
+        }
+      ]
+    },
+    {
+      "cell_type": "markdown",
+      "source": [
+        "### Training Rotary GPT"
+      ],
+      "metadata": {
+        "id": "3kYjGfaZXXJK"
+      }
+    },
+    {
+      "cell_type": "code",
+      "source": [
+        "m = RotaryGPT()\n",
+        "train(m)"
+      ],
+      "metadata": {
+        "colab": {
+          "base_uri": "https://localhost:8080/"
+        },
+        "outputId": "249ecd02-a894-4724-b66a-dec1ed9814a8",
+        "id": "FTvkpUMEXXJK"
+      },
+      "execution_count": null,
+      "outputs": [
+        {
+          "output_type": "stream",
+          "name": "stdout",
+          "text": [
+            "10.795776 M parameters\n",
+            "step 0: train loss 4.2676, val loss 4.2696\n",
+            "step 500: train loss 1.5282, val loss 1.7103\n",
+            "step 1000: train loss 1.3680, val loss 1.5719\n",
+            "step 1500: train loss 1.2829, val loss 1.5202\n",
+            "step 2000: train loss 1.2297, val loss 1.5330\n",
+            "step 2500: train loss 1.1853, val loss 1.5122\n",
+            "step 3000: train loss 1.1419, val loss 1.4857\n",
+            "step 3500: train loss 1.1046, val loss 1.4875\n",
+            "step 4000: train loss 1.0709, val loss 1.5083\n",
+            "step 4500: train loss 1.0301, val loss 1.5111\n",
+            "step 4999: train loss 0.9961, val loss 1.5226\n"
+          ]
+        }
+      ]
+    },
+    {
+      "cell_type": "code",
+      "source": [
+        "check(m)"
+      ],
+      "metadata": {
+        "colab": {
+          "base_uri": "https://localhost:8080/"
+        },
+        "outputId": "b93d1ea8-2c2e-4258-bce0-6b7a2e46909d",
+        "id": "Yly2YcVaXXJK"
+      },
+      "execution_count": null,
+      "outputs": [
+        {
+          "output_type": "stream",
+          "name": "stdout",
+          "text": [
+            "\n",
+            "CORIOLANUS:\n",
+            "Where it is much neither\n",
+            "Should live in these fills of governments,\n",
+            "Consorted with many more probition:\n",
+            "That and my father had been a little, and sold\n",
+            "From his grave things, for flus, he sons, is he.\n",
+            "Then say o'er why, and go I must down to-night.\n",
+            "\n",
+            "CORIOLANUS:\n",
+            "And what's the fellow I do marches my mind\n",
+            "Lest black captainted that rude madlic or a\n",
+            "necessary is minutes? what would yet have I indery,\n",
+            "this peace have no counters there to feel read it\n",
+            "becomes in reckoning, and the sun pity\n"
+          ]
+        }
+      ]
+    },
+    {
+      "cell_type": "markdown",
+      "source": [
+        "### Training GQA GPT"
+      ],
+      "metadata": {
+        "id": "8vpIZGgDXXJL"
+      }
+    },
+    {
+      "cell_type": "code",
+      "source": [
+        "m = GQA_GPT()\n",
+        "train(m)"
+      ],
+      "metadata": {
+        "colab": {
+          "base_uri": "https://localhost:8080/"
+        },
+        "outputId": "ddb1e58e-d915-46c4-9b9b-602b685c86dc",
+        "id": "qhp4JVodXXJL"
+      },
+      "execution_count": null,
+      "outputs": [
+        {
+          "output_type": "stream",
+          "name": "stdout",
+          "text": [
+            "10.795776 M parameters\n",
+            "step 0: train loss 4.3474, val loss 4.3471\n",
+            "step 500: train loss 1.9287, val loss 2.0417\n",
+            "step 1000: train loss 1.5486, val loss 1.7332\n",
+            "step 1500: train loss 1.4099, val loss 1.6239\n",
+            "step 2000: train loss 1.3328, val loss 1.5520\n",
+            "step 2500: train loss 1.2742, val loss 1.5275\n",
+            "step 3000: train loss 1.2359, val loss 1.5080\n",
+            "step 3500: train loss 1.2054, val loss 1.5004\n",
+            "step 4000: train loss 1.1607, val loss 1.4911\n",
+            "step 4500: train loss 1.1422, val loss 1.4750\n",
+            "step 4999: train loss 1.1122, val loss 1.4976\n"
+          ]
+        }
+      ]
+    },
+    {
+      "cell_type": "code",
+      "source": [
+        "check(m)"
+      ],
+      "metadata": {
+        "colab": {
+          "base_uri": "https://localhost:8080/"
+        },
+        "outputId": "6f122f48-089d-4f04-b861-5afc94bfd714",
+        "id": "uxDSRffxXXJL"
+      },
+      "execution_count": null,
+      "outputs": [
+        {
+          "output_type": "stream",
+          "name": "stdout",
+          "text": [
+            "\n",
+            "Who been used with a little power, and you\n",
+            "His reconciled shadows us; let them keep this woe,\n",
+            "Nor was grain and letting be but heaven.\n",
+            "\n",
+            "THOMAS MOWBRAY:\n",
+            "So lay the last, none, look your father Romeo.\n",
+            "Because the ready within aftery enough.\n",
+            "\n",
+            "BRAKENBURY:\n",
+            "Look, CKINGHAM:\n",
+            "Well, my modestrums to me\n",
+            "From Margaret, once it too, I do robed.\n",
+            "\n",
+            "BONA:\n",
+            "For who shall perceive her be,\n",
+            "And nothing; but therefore he comes the crown\n",
+            "And beg him in his amage.\n",
+            "\n",
+            "WARWICK:\n",
+            "The house of York caes of his honour he would\n",
+            "\n"
+          ]
+        }
+      ]
+    },
+    {
+      "cell_type": "markdown",
+      "source": [
+        "### Training SWA GPT"
+      ],
+      "metadata": {
+        "id": "xIX-_xv0XXJM"
+      }
+    },
+    {
+      "cell_type": "code",
+      "source": [
+        "m = SWA_GPT()\n",
+        "train(m)"
+      ],
+      "metadata": {
+        "colab": {
+          "base_uri": "https://localhost:8080/"
+        },
+        "outputId": "18f99874-e7e9-406b-e8c8-38251ebc6ab0",
+        "id": "3J4YMTVNXXJM"
+      },
+      "execution_count": null,
+      "outputs": [
+        {
+          "output_type": "stream",
+          "name": "stdout",
+          "text": [
+            "10.795776 M parameters\n",
+            "step 0: train loss 4.3543, val loss 4.3441\n",
+            "step 500: train loss 1.7976, val loss 1.9332\n",
+            "step 1000: train loss 1.4855, val loss 1.6704\n",
+            "step 1500: train loss 1.3634, val loss 1.5954\n",
+            "step 2000: train loss 1.2959, val loss 1.5500\n",
+            "step 2500: train loss 1.2450, val loss 1.5134\n",
+            "step 3000: train loss 1.2015, val loss 1.4978\n",
+            "step 3500: train loss 1.1678, val loss 1.5079\n",
+            "step 4000: train loss 1.1362, val loss 1.5011\n",
+            "step 4500: train loss 1.1092, val loss 1.5014\n",
+            "step 4999: train loss 1.0752, val loss 1.4959\n"
+          ]
+        }
+      ]
+    },
+    {
+      "cell_type": "code",
+      "source": [
+        "check(m)"
+      ],
+      "metadata": {
+        "colab": {
+          "base_uri": "https://localhost:8080/"
+        },
+        "outputId": "bfdc63ae-ca6f-4ee8-bca6-d9d1cd4e1eb9",
+        "id": "xs86dgMNXXJM"
+      },
+      "execution_count": null,
+      "outputs": [
+        {
+          "output_type": "stream",
+          "name": "stdout",
+          "text": [
+            "\n",
+            "QUEEN MARGARET:\n",
+            "O God, and by yond not of my son's sight:\n",
+            "If I lean the top heir o'ers and session my exer\n",
+            "Lest him fall for my hand; I have right\n",
+            "To fight, and have married good man, to be therein,\n",
+            "Quit mights faint-should be utter, they say.\n",
+            "Methinks you not, Volsces, and scall upon amise\n",
+            "To selp you yourselves. I since to love them on,\n",
+            "That I am yours on my cup and to me and myself?\n",
+            "\n",
+            "FLORIZEL:\n",
+            "Itted him,\n",
+            "Methough I incly hand, there they can, it clon\n",
+            "Was enough reason'd what hop? I fear them \n"
+          ]
+        }
+      ]
+    },
+    {
+      "cell_type": "markdown",
+      "source": [
+        "# DDP"
+      ],
+      "metadata": {
+        "id": "FrmgZww7i0gS"
+      }
+    },
+    {
+      "cell_type": "code",
+      "source": [
+        "import torch\n",
+        "import torch.nn.functional as F\n",
+        "from torch.utils.data import Dataset, DataLoader\n",
+        "from datautils import MyTrainDataset\n",
+        "\n",
+        "import torch.multiprocessing as mp\n",
+        "from torch.utils.data.distributed import DistributedSampler\n",
+        "from torch.nn.parallel import DistributedDataParallel as DDP\n",
+        "from torch.distributed import init_process_group, destroy_process_group\n",
+        "import os\n",
+        "\n",
+        "\n",
+        "def setup(rank, world_size):    # (identifier of each process, total number of processors in group)\n",
+        "\n",
+        "    os.environ[\"MASTER_ADDR\"] = \"localhost\"\n",
+        "    os.environ[\"MASTER_PORT\"] = \"12355\"\n",
+        "    init_process_group(backend=\"nccl\", rank=rank, world_size=world_size)\n",
+        "    torch.cuda.set_device(rank)\n",
+        "\n",
+        "class Trainer:\n",
+        "    def __init__(self,model,train_data,optimizer,gpu_id,save_every,):\n",
+        "\n",
+        "        self.gpu_id = gpu_id\n",
+        "        self.model = model.to(gpu_id)\n",
+        "\n",
+        "        self.train_data = train_data\n",
+        "        self.optimizer = optimizer\n",
+        "        self.save_every = save_every\n",
+        "        self.model = DDP(model, device_ids=[gpu_id])\n",
+        "\n",
+        "    def _run_batch(self, source, targets):\n",
+        "        self.optimizer.zero_grad()\n",
+        "        output = self.model(source)\n",
+        "        loss = F.cross_entropy(output, targets)\n",
+        "        loss.backward()\n",
+        "        self.optimizer.step()\n",
+        "\n",
+        "    def _run_epoch(self, epoch):\n",
+        "        b_sz = len(next(iter(self.train_data))[0])\n",
+        "        print(f\"[GPU{self.gpu_id}] Epoch {epoch} | Batchsize: {b_sz} | Steps: {len(self.train_data)}\")\n",
+        "        self.train_data.sampler.set_epoch(epoch)\n",
+        "        for source, targets in self.train_data:\n",
+        "            source = source.to(self.gpu_id)\n",
+        "            targets = targets.to(self.gpu_id)\n",
+        "            self._run_batch(source, targets)\n",
+        "\n",
+        "    def _save_checkpoint(self, epoch):\n",
+        "        ckp = self.model.module.state_dict()\n",
+        "        PATH = \"checkpoint.pt\"\n",
+        "        torch.save(ckp, PATH)\n",
+        "        print(f\"Epoch {epoch} | Training checkpoint saved at {PATH}\")\n",
+        "\n",
+        "    def train(self, max_epochs: int):\n",
+        "        for epoch in range(max_epochs):\n",
+        "            self._run_epoch(epoch)\n",
+        "            if self.gpu_id == 0 and epoch % self.save_every == 0:\n",
+        "                self._save_checkpoint(epoch)\n",
+        "\n",
+        "\n",
+        "\n",
+        "def prepare_dataloader(dataset, batch_size):\n",
+        "    return DataLoader(\n",
+        "        dataset,\n",
+        "        batch_size=batch_size,\n",
+        "        pin_memory=True,\n",
+        "        shuffle=False,\n",
+        "        sampler=DistributedSampler(dataset)\n",
+        "    )\n",
+        "\n",
+        "\n",
+        "def main(rank: int, world_size: int, save_every: int, total_epochs: int, batch_size: int):\n",
+        "    setup(rank, world_size)\n",
+        "    train_data = prepare_dataloader(data, batch_size)\n",
+        "    optimizer  = optimizer = torch.optim.AdamW(m.parameters(), lr=learning_rate)\n",
+        "    trainer = Trainer(m, train_data, optimizer, rank, save_every)\n",
+        "    trainer.train(total_epochs)\n",
+        "    destroy_process_group()\n",
+        "\n",
+        "\n",
+        "world_size = torch.cuda.device_count()\n",
+        "mp.spawn(main, args=(world_size, iter_intverals, epochs, batch_size), nprocs=world_size)"
+      ],
+      "metadata": {
+        "id": "wgqquqKIiwd1"
+      },
+      "execution_count": null,
+      "outputs": []
+    }
+  ]
+}
